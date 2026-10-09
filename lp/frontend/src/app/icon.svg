@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="dxp-icon-title">
+  <title id="dxp-icon-title">DXP</title>
+  <rect width="64" height="64" rx="14" fill="#000000"/>
+  <g fill="#f3efe6" transform="translate(10 8) scale(0.042 -0.042)">
+    <path d="M46 0V116H138V584H46V700H334Q475 700 548.5 628.5Q622 557 622 416V284Q622 143 548.5 71.5Q475 0 334 0ZM270 120H336Q416 120 453 162Q490 204 490 280V420Q490 497 453 538.5Q416 580 336 580H270Z"/>
+  </g>
+  <circle cx="52" cy="50" r="4.5" fill="#ff4b18"/>
+</svg>

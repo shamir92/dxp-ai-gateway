@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="203" viewBox="105.1 53.2 47.4 18.8" role="img" aria-labelledby="dxp-logo-light-title">
+  <title id="dxp-logo-light-title">DXP.</title>
+  <g fill="#f3efe6">
+    <path d="M46 0V116H138V584H46V700H334Q475 700 548.5 628.5Q622 557 622 416V284Q622 143 548.5 71.5Q475 0 334 0ZM270 120H336Q416 120 453 162Q490 204 490 280V420Q490 497 453 538.5Q416 580 336 580H270Z" transform="translate(104 70) scale(0.024 -0.024)"/>
+    <path d="M22 0 227 353 24 700H174L313 447H331L470 700H620L417 353L622 0H472L331 259H313L172 0Z" transform="translate(118.448 70) scale(0.024 -0.024)"/>
+    <path d="M66 0V700H354Q420 700 470.5 673.5Q521 647 549.5 599Q578 551 578 485V471Q578 406 548.5 357.5Q519 309 468.5 282.5Q418 256 354 256H198V0ZM198 376H341Q388 376 417 402Q446 428 446 473V483Q446 528 417 554Q388 580 341 580H198Z" transform="translate(132.944 70) scale(0.024 -0.024)"/>
+  </g>
+  <circle cx="150.675" cy="70.205" r="1.795" fill="#ff4b18"/>
+</svg>
