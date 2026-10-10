@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+  <body style="font-family: system-ui, sans-serif; background: #f7f4ee; margin: 0; padding: 32px;">
+    <div style="max-width: 480px; margin: 0 auto; background: #fff; border-radius: 16px; padding: 32px; border: 1px solid #e8e0d4;">
+      <p style="font-size: 14px; color: #666; margin: 0 0 16px;">{{.ProductName}}</p>
+      <h1 style="font-size: 20px; margin: 0 0 12px; color: #111;">New sign-in</h1>
+      <p style="font-size: 14px; color: #444; line-height: 1.6; margin: 0 0 16px;">
+        We noticed a new sign-in to your account.
+      </p>
+      <table style="width: 100%; font-size: 13px; color: #333; border-collapse: collapse;">
+        <tr><td style="padding: 6px 0; color: #888;">Device</td><td style="padding: 6px 0;">{{.Device}}</td></tr>
+        <tr><td style="padding: 6px 0; color: #888;">IP</td><td style="padding: 6px 0;">{{.IP}}</td></tr>
+        <tr><td style="padding: 6px 0; color: #888;">Location</td><td style="padding: 6px 0;">{{.Location}}</td></tr>
+        <tr><td style="padding: 6px 0; color: #888;">When</td><td style="padding: 6px 0;">{{.LoggedInAt}}</td></tr>
+      </table>
+      <p style="font-size: 12px; color: #888; line-height: 1.6; margin: 20px 0 0;">
+        If this was not you, sign out other sessions from Profile → Active sessions and contact {{.SupportEmail}}.
+      </p>
+    </div>
+  </body>
+</html>

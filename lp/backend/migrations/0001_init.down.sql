@@ -1,0 +1,6 @@
+DROP TABLE IF EXISTS login_audit;
+DROP TABLE IF EXISTS user_settings;
+DROP TABLE IF EXISTS magic_codes;
+DROP TABLE IF EXISTS sessions;
+DROP TABLE IF EXISTS auth_methods;
+DROP TABLE IF EXISTS users;

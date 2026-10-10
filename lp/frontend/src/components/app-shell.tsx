@@ -20,6 +20,7 @@ const sections = [
     items: [
       { label: "Profile", href: "/profile" },
       { label: "Settings", href: "/settings" },
+      { label: "Log out", href: "/logout" },
     ],
   },
   {

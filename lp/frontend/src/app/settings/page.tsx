@@ -1,117 +1,117 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { AppShell } from "@/components/app-shell";
 import { TopSearchBar } from "@/components/token-plan-ui";
+import { apiJSON } from "@/lib/api";
+
+type Settings = {
+  notify_balance: boolean;
+  notify_usage: boolean;
+  notify_security: boolean;
+  notify_product: boolean;
+};
 
 export default function SettingsPage() {
+  const [s, setS] = useState<Settings | null>(null);
+  const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const data = await apiJSON<Settings>("/api/v1/settings");
+      setS({
+        notify_balance: data.notify_balance,
+        notify_usage: data.notify_usage,
+        notify_security: data.notify_security,
+        notify_product: data.notify_product,
+      });
+    } catch {
+      window.location.href = "/login";
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  function patch(p: Partial<Settings>) {
+    setS((prev) => (prev ? { ...prev, ...p } : prev));
+    setSaved(false);
+  }
+
+  async function save() {
+    if (!s) return;
+    setBusy(true);
+    setError("");
+    try {
+      await apiJSON("/api/v1/settings", {
+        method: "PATCH",
+        body: JSON.stringify(s),
+      });
+      setSaved(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <AppShell
       title="Settings"
-      subtitle="Workspace preferences, notifications, and API defaults."
+      subtitle="Workspace preferences and notifications."
       actions={
         <div className="flex items-center gap-3">
           <TopSearchBar />
-          <Button className="rounded-full bg-ink text-[12px] text-white hover:bg-ink/90">
+          <Button
+            onClick={() => void save()}
+            disabled={busy || !s}
+            className="rounded-full bg-ink text-[12px] text-white hover:bg-ink/90"
+          >
             Save changes
           </Button>
         </div>
       }
     >
       <div className="mx-auto max-w-[760px] space-y-6">
-        <Card className="border-line-warm bg-white">
-          <CardHeader>
-            <CardTitle className="text-[15px]">Workspace</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label>Default region</Label>
-                <Select defaultValue="sgp">
-                  <SelectTrigger className="rounded-xl">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="sgp">Singapore (sgp-1)</SelectItem>
-                    <SelectItem value="us">United States (us-1)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Default model</Label>
-                <Select defaultValue="flash">
-                  <SelectTrigger className="rounded-xl">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="mimo-v2.6-flash">mimo-v2.6-flash</SelectItem>
-                    <SelectItem value="mimo-v2.6-pro">mimo-v2.6-pro</SelectItem>
-                    <SelectItem value="deepseek-v4.1-flash">deepseek-v4.1-flash</SelectItem>
-                    <SelectItem value="deepseek-v4-flash">deepseek-v4-flash</SelectItem>
-                    <SelectItem value="glm-5.3-flash">glm-5.3-flash</SelectItem>
-                    <SelectItem value="glm-5.3">glm-5.3</SelectItem>
-                    <SelectItem value="kimi-k3">kimi-k3</SelectItem>
-                    <SelectItem value="minimax-m3">minimax-m3</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        {error ? (
+          <p className="rounded-xl border border-flame/30 bg-flame/5 px-4 py-3 text-[12px] text-flame">{error}</p>
+        ) : null}
+        {saved ? (
+          <p className="rounded-xl border border-success/30 bg-success/5 px-4 py-3 text-[12px] text-success">
+            Settings saved.
+          </p>
+        ) : null}
 
         <Card className="border-line-warm bg-white">
           <CardHeader>
             <CardTitle className="text-[15px]">Notifications</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {[
-              ["Balance alerts", "Email when balance falls below threshold", true],
-              ["Usage digest", "Weekly usage and spend summary", true],
-              ["Security alerts", "New device and credential changes", true],
-              ["Product updates", "Model launches and API changes", false],
-            ].map(([title, desc, on]) => (
-              <div key={title as string} className="flex items-center justify-between gap-4">
+            {(
+              [
+                ["notify_balance", "Balance alerts", "Email when balance falls below threshold"],
+                ["notify_usage", "Usage digest", "Weekly usage and spend summary"],
+                ["notify_security", "Security alerts", "New device and credential changes"],
+                ["notify_product", "Product updates", "Model launches and API changes"],
+              ] as const
+            ).map(([key, title, desc]) => (
+              <div key={key} className="flex items-center justify-between gap-4">
                 <div>
                   <p className="text-[13px] font-medium text-ink">{title}</p>
                   <p className="text-[11px] text-muted-warm">{desc}</p>
                 </div>
-                <Switch defaultChecked={on as boolean} />
+                <Switch
+                  checked={s?.[key] ?? false}
+                  onCheckedChange={(v) => patch({ [key]: v } as Partial<Settings>)}
+                />
               </div>
             ))}
-          </CardContent>
-        </Card>
-
-        <Card className="border-line-warm bg-white">
-          <CardHeader>
-            <CardTitle className="text-[15px]">API defaults</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-[13px] font-medium text-ink">Stream responses by default</p>
-                <p className="text-[11px] text-muted-warm">
-                  Prefer streaming for chat completions when supported.
-                </p>
-              </div>
-              <Switch defaultChecked />
-            </div>
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-[13px] font-medium text-ink">Store request logs</p>
-                <p className="text-[11px] text-muted-warm">
-                  Keep metadata for usage analytics (payloads excluded).
-                </p>
-              </div>
-              <Switch defaultChecked />
-            </div>
           </CardContent>
         </Card>
       </div>

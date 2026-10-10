@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Copy, ExternalLink, Key } from "lucide-react";
+import { UserAvatar } from "@/components/user-avatar";
 
 export function TopSearchBar() {
   return (
@@ -11,9 +12,7 @@ export function TopSearchBar() {
         <span>⌕</span>
         Search models, keys, requests…
       </div>
-      <div className="flex size-9 items-center justify-center rounded-full bg-prompt text-[11px] font-semibold text-white">
-        SK
-      </div>
+      <UserAvatar />
     </div>
   );
 }
