@@ -148,8 +148,8 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-cream px-6 py-12">
-      <div className="w-full max-w-sm rounded-2xl border border-line-warm bg-white p-8">
+    <div className="auth-shell flex min-h-screen items-center justify-center bg-cream px-6 py-12">
+      <div className="w-full max-w-[432px] rounded-2xl border border-line-warm bg-white p-8">
         <Brand href="/" />
         <h1 className="mt-8 font-heading text-[24px] font-semibold text-ink">
           {mode === "login" ? "Welcome back" : "Create your account"}

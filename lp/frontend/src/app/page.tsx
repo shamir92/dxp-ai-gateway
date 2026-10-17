@@ -130,8 +130,7 @@ export default function LandingPage() {
     <PublicShell>
       {/* Hero */}
       <section className="relative overflow-hidden bg-cream px-14 py-20">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,90,42,0.12),transparent_55%)]" />
-        <div className="relative mx-auto grid max-w-[1302px] items-center gap-14 lg:grid-cols-[1fr_1.1fr]">
+        <div className="mx-auto grid max-w-[1302px] items-center gap-14 lg:grid-cols-[1fr_1.1fr]">
           <div>
             <Badge className="rounded-full border-line-warm bg-white px-3 py-1.5 text-[10px] font-medium text-ink">
               <span className="mr-1.5 size-1.5 rounded-full bg-flame" />

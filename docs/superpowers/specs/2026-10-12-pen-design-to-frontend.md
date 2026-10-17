@@ -25,7 +25,7 @@ Translate all 18 designed screens:
 | Profile & account | `/profile` |
 | API lifecycle | `/api-lifecycle` |
 | Plugins | `/plugins` |
-| Settings | `/settings` |
+| Settings and notifications | `/profile` (folded into Profile); `/settings` redirects to `/profile` |
 | Documentation | `/documentation` |
 | Support center | `/support` |
 
@@ -38,6 +38,7 @@ The two group frames in the design organize public and signed-in screens; they a
 - Match the design's colors, type, spacing, and layout using the tokens and typography already present in the Pencil file and frontend.
 - Update each route's page content to match its corresponding frame. Reuse existing UI components and extract focused shared components only where the design repeats a real pattern.
 - Keep existing API calls, session handling, forms, loading/error states, and route destinations. Do not introduce backend contracts or fabricate data behavior for static screens.
+- Fold the Settings frame's notification controls into Profile. Preserve the existing `/settings` redirect to `/profile` and do not add a separate Settings navigation item.
 - Adapt the desktop canvas layouts to existing responsive conventions.
 
 ## Implementation order

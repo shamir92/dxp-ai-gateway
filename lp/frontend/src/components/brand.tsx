@@ -1,6 +1,25 @@
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
+function GatewayMark() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 16 16"
+      fill="none"
+      className="size-[0.85em] shrink-0 text-[#ff5a2a]"
+    >
+      <path
+        d="M10.5 3.5h3v9h-3M2 8h9m-3-3 3 3-3 3"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export function BrandMark({
   className,
   inverted = false,
@@ -9,13 +28,19 @@ export function BrandMark({
   inverted?: boolean;
 }) {
   return (
-    <img
-      src={inverted ? "/dxp-logo-light.svg" : "/dxp-logo.svg"}
-      alt="DXP."
-      width={72}
-      height={29}
-      className={cn("h-7 w-auto", className)}
-    />
+    <span
+      role="img"
+      aria-label="DXP AI Gateway"
+      className={cn(
+        "inline-flex items-center gap-1.5 whitespace-nowrap text-base font-semibold leading-none tracking-tight",
+        inverted ? "text-[#f3efe6]" : "text-ink",
+        className,
+      )}
+    >
+      <span>DXP</span>
+      <GatewayMark />
+      <span className="site-brand-name">AI Gateway</span>
+    </span>
   );
 }
 
@@ -29,14 +54,8 @@ export function Brand({
   inverted?: boolean;
 }) {
   return (
-    <Link
-      href={href}
-      className={cn("flex items-center gap-2.5 font-semibold tracking-tight", className)}
-    >
-      <BrandMark inverted={inverted} className="h-8 w-auto" />
-      <span className={cn("text-[17px]", inverted ? "text-white" : "text-ink")}>
-        AI Gateway
-      </span>
+    <Link href={href} className={cn("inline-flex items-center", className)}>
+      <BrandMark inverted={inverted} className="text-[18px]" />
     </Link>
   );
 }

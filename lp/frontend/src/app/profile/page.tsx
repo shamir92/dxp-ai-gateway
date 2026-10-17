@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { AppShell } from "@/components/app-shell";
 import { TopSearchBar } from "@/components/token-plan-ui";
@@ -29,11 +30,19 @@ type SessionRow = {
   current: boolean;
 };
 
+type Settings = {
+  notify_balance: boolean;
+  notify_usage: boolean;
+  notify_security: boolean;
+  notify_product: boolean;
+  login_alerts: boolean;
+};
+
 type ProfileResponse = {
   user: ProfileUser;
   connections: Connection[];
   session_count: number;
-  settings: { login_alerts: boolean };
+  settings?: { login_alerts: boolean };
 };
 
 function initials(name: string, email: string) {
@@ -52,20 +61,35 @@ export default function ProfilePage() {
   const [email, setEmail] = useState("");
   const [connections, setConnections] = useState<Connection[]>([]);
   const [sessions, setSessions] = useState<SessionRow[]>([]);
-  const [loginAlerts, setLoginAlerts] = useState(true);
+  const [settings, setSettings] = useState<Settings>({
+    notify_balance: true,
+    notify_usage: true,
+    notify_security: true,
+    notify_product: false,
+    login_alerts: true,
+  });
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const profile = await apiJSON<ProfileResponse>("/api/v1/profile");
+      const [profile, preferences, sess] = await Promise.all([
+        apiJSON<ProfileResponse>("/api/v1/profile"),
+        apiJSON<Omit<Settings, "login_alerts">>("/api/v1/settings"),
+        apiJSON<{ sessions: SessionRow[] }>("/api/v1/profile/sessions"),
+      ]);
       setUser(profile.user);
       setName(profile.user.name);
       setEmail(profile.user.email);
       setConnections(profile.connections ?? []);
-      setLoginAlerts(profile.settings?.login_alerts ?? true);
-      const sess = await apiJSON<{ sessions: SessionRow[] }>("/api/v1/profile/sessions");
+      setSettings({
+        notify_balance: preferences.notify_balance ?? true,
+        notify_usage: preferences.notify_usage ?? true,
+        notify_security: preferences.notify_security ?? true,
+        notify_product: preferences.notify_product ?? false,
+        login_alerts: profile.settings?.login_alerts ?? true,
+      });
       setSessions(sess.sessions ?? []);
     } catch {
       window.location.href = "/login";
@@ -76,6 +100,11 @@ export default function ProfilePage() {
     void load();
   }, [load]);
 
+  function patchSettings(p: Partial<Settings>) {
+    setSettings((prev) => ({ ...prev, ...p }));
+    setSaved(false);
+  }
+
   async function save() {
     setBusy(true);
     setError("");
@@ -84,6 +113,19 @@ export default function ProfilePage() {
       await apiJSON("/api/v1/profile", {
         method: "PATCH",
         body: JSON.stringify({ name, email }),
+      });
+      await apiJSON("/api/v1/settings", {
+        method: "PATCH",
+        body: JSON.stringify({
+          notify_balance: settings.notify_balance,
+          notify_usage: settings.notify_usage,
+          notify_security: settings.notify_security,
+          notify_product: settings.notify_product,
+        }),
+      });
+      await apiJSON("/api/v1/profile/security", {
+        method: "PATCH",
+        body: JSON.stringify({ login_alerts: settings.login_alerts }),
       });
       setSaved(true);
     } catch (e) {
@@ -110,18 +152,10 @@ export default function ProfilePage() {
     await load();
   }
 
-  async function updateAlerts(next: boolean) {
-    setLoginAlerts(next);
-    await apiJSON("/api/v1/profile/security", {
-      method: "PATCH",
-      body: JSON.stringify({ login_alerts: next }),
-    }).catch(() => {});
-  }
-
   return (
     <AppShell
       title="Profile & account"
-      subtitle="Manage your identity, connected accounts, and security preferences."
+      subtitle="Manage your identity, connected accounts, security, and notifications."
       actions={
         <div className="flex items-center gap-3">
           <TopSearchBar />
@@ -141,7 +175,7 @@ export default function ProfilePage() {
         ) : null}
         {saved ? (
           <p className="rounded-xl border border-success/30 bg-success/5 px-4 py-3 text-[12px] text-success">
-            Profile saved.
+            Saved.
           </p>
         ) : null}
 
@@ -233,13 +267,10 @@ export default function ProfilePage() {
                 <p className="text-[13px] font-medium text-ink">Login alerts</p>
                 <p className="text-[11px] text-muted-warm">Email on new device sign-in</p>
               </div>
-              <Button
-                variant="outline"
-                className="rounded-full border-line-warm text-[12px]"
-                onClick={() => void updateAlerts(!loginAlerts)}
-              >
-                {loginAlerts ? "Enabled" : "Disabled"}
-              </Button>
+              <Switch
+                checked={settings.login_alerts}
+                onCheckedChange={(v) => patchSettings({ login_alerts: v })}
+              />
             </div>
             <Separator />
             <div>
@@ -280,6 +311,33 @@ export default function ProfilePage() {
                 ) : null}
               </div>
             </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-line-warm bg-white">
+          <CardHeader>
+            <CardTitle className="text-[15px]">Notifications</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {(
+              [
+                ["notify_balance", "Balance alerts", "Email when balance falls below threshold"],
+                ["notify_usage", "Usage digest", "Weekly usage and spend summary"],
+                ["notify_security", "Security alerts", "New device and credential changes"],
+                ["notify_product", "Product updates", "Model launches and API changes"],
+              ] as const
+            ).map(([key, title, desc]) => (
+              <div key={key} className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-[13px] font-medium text-ink">{title}</p>
+                  <p className="text-[11px] text-muted-warm">{desc}</p>
+                </div>
+                <Switch
+                  checked={settings[key]}
+                  onCheckedChange={(v) => patchSettings({ [key]: v } as Partial<Settings>)}
+                />
+              </div>
+            ))}
           </CardContent>
         </Card>
       </div>

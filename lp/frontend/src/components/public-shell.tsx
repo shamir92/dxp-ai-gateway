@@ -33,7 +33,7 @@ export function SiteHeader() {
         </p>
       </div>
       <header className="border-b border-line-warm bg-white">
-        <div className="mx-auto flex h-[72px] max-w-[1442px] items-center justify-between px-14">
+        <div className="mx-auto flex h-[72px] max-w-[1442px] items-center justify-between px-4 sm:px-6 lg:px-14">
           <Brand />
           <nav className="hidden items-center gap-8 md:flex">
             {navItems.map((item) =>
@@ -102,7 +102,7 @@ const footerColumns = [
 
 export function SiteFooter() {
   return (
-    <footer className="bg-night px-14 py-16 text-white">
+    <footer className="bg-night px-4 py-12 text-white sm:px-6 sm:py-16 lg:px-14">
       <div className="mx-auto max-w-[1330px]">
         <div className="grid gap-12 lg:grid-cols-[360px_1fr]">
           <div>
@@ -154,7 +154,7 @@ export function SiteFooter() {
 
 export function PublicShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="public-shell flex min-h-screen flex-col">
       <SiteHeader />
       <main className="flex-1">{children}</main>
       <SiteFooter />

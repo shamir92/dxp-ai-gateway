@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import { TokenPlanDashboard } from "@/components/token-plan-dashboard";
 
 export default function ConsumptionPage() {
-  redirect("/token-plan");
+  return <TokenPlanDashboard initialView="total" />;
 }

@@ -33,11 +33,11 @@ export default function ApiLifecyclePage() {
       actions={<TopSearchBar />}
     >
       <div className="mx-auto max-w-[1204px] space-y-8">
-        <div className="flex items-center gap-4">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center">
           <Button variant="ghost" className="rounded-full border border-line-warm text-[12px]">
             Lifecycle guide
           </Button>
-          <div className="flex flex-1 flex-wrap gap-3">
+          <div className="grid flex-1 grid-cols-2 gap-3 xl:grid-cols-4">
             {steps.map((s) => (
               <div key={s.n} className="flex min-w-[160px] flex-1 items-center gap-3 rounded-xl border border-line-warm bg-white px-4 py-3">
                 <span className="text-[12px] font-semibold text-flame">{s.n}</span>
@@ -63,8 +63,8 @@ export default function ApiLifecyclePage() {
             </Button>
           </CardHeader>
           <CardContent>
-            <div className="overflow-hidden rounded-xl border border-line-warm">
-              <table className="w-full text-left text-[12px]">
+            <div className="overflow-x-auto rounded-xl border border-line-warm">
+              <table className="w-full min-w-[600px] text-left text-[12px]">
                 <thead className="bg-cream-card text-[10px] uppercase tracking-wide text-muted-warm">
                   <tr>
                     <th className="px-4 py-3">Name</th>
@@ -154,8 +154,8 @@ export default function ApiLifecyclePage() {
               <StatTile label="Completed" value="128" hint="99.2% success rate" />
               <StatTile label="Month cost" value="$184.60" hint="59% of total spend" />
             </div>
-            <div className="mt-5 overflow-hidden rounded-xl border border-line-warm">
-              <table className="w-full text-left text-[12px]">
+            <div className="mt-5 overflow-x-auto rounded-xl border border-line-warm">
+              <table className="w-full min-w-[680px] text-left text-[12px]">
                 <thead className="bg-cream-card text-[10px] uppercase tracking-wide text-muted-warm">
                   <tr>
                     <th className="px-4 py-3">Job</th>

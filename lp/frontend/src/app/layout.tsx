@@ -1,20 +1,19 @@
 import type { Metadata } from "next";
-import { Inter, Roboto_Slab, Roboto_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 
-const inter = Inter({
-  variable: "--font-sans",
-  subsets: ["latin"],
+const geist = localFont({
+  src: "./fonts/geist.woff2",
+  variable: "--font-geist",
+  weight: "100 900",
+  display: "swap",
 });
 
-const robotoSlab = Roboto_Slab({
-  variable: "--font-heading",
-  subsets: ["latin"],
-});
-
-const robotoMono = Roboto_Mono({
-  variable: "--font-mono",
-  subsets: ["latin"],
+const geistMono = localFont({
+  src: "./fonts/geist-mono.woff2",
+  variable: "--font-geist-mono",
+  weight: "100 900",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -27,7 +26,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${robotoSlab.variable} ${robotoMono.variable} h-full antialiased`}
+      className={`${geist.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col font-sans">{children}</body>
     </html>
