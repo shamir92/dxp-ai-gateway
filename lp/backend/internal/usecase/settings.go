@@ -3,9 +3,11 @@ package usecase
 import (
 	"context"
 	"errors"
+
+	"github.com/google/uuid"
+
 	"github.com/dxpglobal/ai-gateway/backend/internal/entity"
 	"github.com/dxpglobal/ai-gateway/backend/internal/repository"
-	"github.com/google/uuid"
 )
 
 type SettingsPatch struct {

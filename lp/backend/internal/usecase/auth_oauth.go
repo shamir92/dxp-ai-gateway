@@ -2,9 +2,11 @@ package usecase
 
 import (
 	"context"
-	"github.com/dxpglobal/ai-gateway/backend/internal/entity"
-	"github.com/google/uuid"
 	"strings"
+
+	"github.com/google/uuid"
+
+	"github.com/dxpglobal/ai-gateway/backend/internal/entity"
 )
 
 func (u *AuthUsecase) CompleteOAuthLogin(ctx context.Context, provider entity.Provider, providerUserID, email, name, avatarURL string, meta SessionMeta) (*AuthResult, error) {

@@ -5,11 +5,13 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"time"
+
+	"github.com/google/uuid"
+
 	"github.com/dxpglobal/ai-gateway/backend/internal/entity"
 	"github.com/dxpglobal/ai-gateway/backend/internal/pkg/mail"
 	"github.com/dxpglobal/ai-gateway/backend/internal/pkg/ua"
-	"github.com/google/uuid"
-	"time"
 )
 
 func (u *AuthUsecase) Logout(ctx context.Context, sessionID uuid.UUID) error {
