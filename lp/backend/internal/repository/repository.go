@@ -5,11 +5,12 @@ import (
 	"errors"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/dxpglobal/ai-gateway/backend/internal/entity"
+	"github.com/google/uuid"
 )
 
 var ErrNotFound = errors.New("repository: not found")
+var ErrLeaseLost = errors.New("repository: external account lease lost")
 
 type UserRepo interface {
 	Create(ctx context.Context, u *entity.User) error
@@ -53,11 +54,22 @@ type LoginAuditRepo interface {
 	ListByUser(ctx context.Context, userID uuid.UUID, limit int) ([]entity.LoginAudit, error)
 }
 
+type NewAccountRepo interface {
+	CreateNewAccount(ctx context.Context, user *entity.User, method *entity.AuthMethod, accounts []entity.ExternalSiteAccount) error
+}
+
+type ExternalSiteAccountRepo interface {
+	ClaimDue(ctx context.Context, now, leaseExpiresAt time.Time, limit int) ([]entity.ExternalSiteAccount, error)
+	MarkProvisioned(ctx context.Context, id, leaseToken uuid.UUID, remoteUserID string, at time.Time) error
+	MarkRetry(ctx context.Context, id, leaseToken uuid.UUID, nextAttemptAt time.Time, summary string, at time.Time) error
+	MarkFailed(ctx context.Context, id, leaseToken uuid.UUID, summary string, at time.Time) error
+}
+
 type Repos struct {
-	Users      UserRepo
+	Users       UserRepo
 	AuthMethods AuthMethodRepo
-	Sessions   SessionRepo
-	Settings   SettingsRepo
-	MagicCodes MagicCodeRepo
-	LoginAudit LoginAuditRepo
+	Sessions    SessionRepo
+	Settings    SettingsRepo
+	MagicCodes  MagicCodeRepo
+	LoginAudit  LoginAuditRepo
 }

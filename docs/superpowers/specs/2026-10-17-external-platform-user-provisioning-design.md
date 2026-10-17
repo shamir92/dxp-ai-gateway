@@ -1,6 +1,6 @@
 # External Platform User Provisioning
 
-**Status:** Draft for user review  
+**Status:** Provisioning implemented; tests pending
 **Date:** 2026-10-17
 
 ## Goal
@@ -20,6 +20,7 @@ The Go backend creates local users in `AuthUsecase.VerifyMagicCode` and `AuthUse
 - Let local gateway sign-up complete if an external site is unavailable; retry provisioning in the background.
 - Use a database-backed retry workflow in the existing backend, with no separate queue service.
 - Defer access-token creation to a later phase. This phase stores credentials and provides an internal decryption capability for a future backend consumer.
+- TPAI and APAI use the same user, verification, and access-token endpoints and request shapes; only the configured base URL and admin bearer differ.
 - Read site URLs, admin bearer tokens, and the encryption key from environment variables. Use `.env` for local development. The production secret source is undecided until the deployment stack and cost are selected.
 
 ## Scope
@@ -45,8 +46,8 @@ The Go backend creates local users in `AuthUsecase.VerifyMagicCode` and `AuthUse
 2. The backend generates two independent passwords and encrypts each one.
 3. In the same PostgreSQL transaction that creates the local user, it creates default settings, the initial auth method, and one pending external-account row for each site. Existing accounts and OAuth links to an existing user do not create new provisioning rows.
 4. The normal gateway session is issued after the local transaction commits. The request does not wait for either external site.
-5. A worker in the existing Go process claims due rows using a short database lease, then releases the transaction before making HTTP calls. It processes TPAI and APAI independently.
-6. A successful response marks that site's row provisioned and saves the remote user ID if the response provides one. A failure updates only that site's retry state.
+5. A worker in the existing Go process claims due rows using a short database lease and unique claim token, then releases the transaction before making HTTP calls. It processes TPAI and APAI independently.
+6. A successful 2xx response marks that site's row provisioned. A failure updates only that site's retry state.
 7. A future internal access-token use case may decrypt a site's password by local user ID and site. No HTTP endpoint exposes this operation.
 
 Persisting provisioning rows in the local account transaction closes the gap where the local account exists but a process crash loses the request to provision the external accounts.
@@ -58,7 +59,7 @@ Add an `external_site_accounts` table rather than password columns on `users`. A
 Each row should include:
 
 - `id`, `user_id` (foreign key with cascade delete), and `site` (`tpai` or `apai`)
-- `username`
+- `username` and `display_name` captured for the create-user request
 - `password_ciphertext` and its nonce, stored as binary data
 - `encryption_key_version`
 - `remote_user_id`, nullable until returned by the remote API
@@ -72,6 +73,7 @@ Add a unique constraint on `(user_id, site)` and an index for due pending/retryi
 
 - Use AES-256-GCM with a 32-byte key supplied as base64 through `EXTERNAL_PASSWORD_ENCRYPTION_KEY`.
 - Store the ciphertext and nonce together as binary values, plus a key version. Keep the key outside PostgreSQL.
+- Preserve the encryption key across restarts and deployments. Replacing it requires re-encrypting stored credentials first.
 - Bind ciphertext to the local user ID and site as authenticated additional data so ciphertext cannot be swapped between users or sites.
 - Generate passwords with `crypto/rand`; decrypt only inside backend code when a future trusted operation needs them.
 - Never log request or response bodies, admin tokens, plaintext passwords, or ciphertext. Persist only sanitized error summaries.
@@ -86,7 +88,18 @@ Use these environment variables:
 - `APAI_BASE_URL`, `APAI_ADMIN_TOKEN`
 - `EXTERNAL_PASSWORD_ENCRYPTION_KEY`
 
-The configured base URL is fixed by deployment configuration, never supplied by an end user. The HTTP client uses HTTPS in deployed environments, a bounded timeout, and safe redirect handling so admin credentials cannot be forwarded to an unexpected host.
+The configured base URL is fixed by deployment configuration, never supplied by an end user. The backend requires both site URLs, both admin tokens, and a valid encryption key at startup. The HTTP client requires an HTTPS origin, uses a bounded timeout, and does not follow redirects so admin credentials cannot be forwarded to an unexpected host.
+
+TPAI and APAI use one shared client implementation with site-specific base URLs and admin tokens. The create-user request path and body are:
+
+```http
+POST /api/user/
+Authorization: Bearer <site admin token>
+Content-Type: application/json
+Origin: <site base URL>
+Referer: <site base URL>/users
+Cookie: new_api_has_session=1
+```
 
 For each site, send the supplied request shape:
 
@@ -99,11 +112,21 @@ For each site, send the supplied request shape:
 }
 ```
 
+## Deferred access-token flow
+
+Access-token creation remains outside this provisioning phase. The supplied TPAI requests establish the following flow for a later phase; APAI uses the same paths and payloads with its own base URL and that site's saved user password:
+
+1. Log in with `POST /api/user/login?turnstile=` using the site's provisioned username and decrypted password. Use the returned authorization bearer for the following requests.
+2. Request a security proof with `POST /api/verify`, using the login bearer and password. The request uses `method: "password"`, `scope: "access_token.generate"`, and a context containing the requested `scopes` and `expires_at`.
+3. Create the token with `POST /api/user/access_tokens`, using the login bearer and the returned proof in the `X-Security-Proof` header. The body contains `name`, `scopes`, and `expires_at`. The `scopes` and `expires_at` must match the values used in the proof context.
+
+The supplied verify and token-creation cURLs also send the `new_api_has_session=1` cookie. Confirm whether this cookie is required for backend requests and whether login returns any cookies that must be forwarded. The cURLs do not include response bodies, so the JSON fields containing the login bearer, security proof, created token, or remote user ID remain unconfirmed. Do not persist or log these values until the later token-creation phase defines their handling and storage requirements.
+
 ## Retry and failure handling
 
 - Retry network errors, HTTP 429, and 5xx responses with exponential backoff and jitter; honor `Retry-After` when present.
 - Treat validation failures and admin-token 401/403 responses as failed records requiring operator correction. Do not drop the encrypted credentials or retry them on every poll.
-- Use a lease and atomic claim so multiple backend instances do not process the same due row concurrently. Expired leases become eligible again after a worker crash.
+- Use a lease, unique claim token, and atomic claim so multiple backend instances do not process the same due row concurrently or let an expired worker overwrite a newer result. Expired leases become eligible again after a worker crash.
 - Bound each HTTP request, cancel worker activity during graceful shutdown, and never hold a database transaction open during the network request.
 - A timeout can happen after a remote account was created. The supplied contract does not establish idempotency, lookup-by-username, response fields, or duplicate-user behavior. Until verified, a duplicate conflict must be recorded for reconciliation, not assumed to be success.
 - Define an internal operator procedure to correct configuration and requeue permanent failures before production. Do not add a public retry endpoint in this phase.
@@ -127,10 +150,12 @@ For each site, send the supplied request shape:
 - Verify repository uniqueness, due-row claims, leases, and independent TPAI/APAI state transitions.
 - Use fake HTTP servers to check paths, bearer headers, payload mapping, timeout behavior, redirect handling, and retry classification without contacting production sites.
 - Verify logs and user-facing JSON never include tokens or credential material.
-- Confirm the real sites' response schema, role semantics, idempotency/lookup behavior, and duplicate-user response before implementation.
+- Confirm the real sites' role semantics, idempotency/lookup behavior, and duplicate-user response before production provisioning. Until the response schema is known, a 2xx response marks the row provisioned without storing a remote user ID.
+- Before implementing the deferred access-token phase, confirm response field names for login, verification, and token creation, cookie/session requirements, token naming rules, and access-token storage/rotation requirements.
 
 ## Open decisions
 
 1. Which deployment secret source will provide the environment variables? Decide after the deployment stack and cost are evaluated.
 2. What do the real create-user responses contain, and can a user be looked up or created idempotently by username? Confirm with the site API before implementation.
 3. What operator mechanism should requeue permanent provisioning failures? This phase assumes a private runbook or internal operation, not a public API.
+4. For the deferred token-creation phase, what response fields carry the login bearer, security proof, and generated access token, and which cookie/session values must be forwarded?

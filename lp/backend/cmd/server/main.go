@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -16,6 +19,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/dxpglobal/ai-gateway/backend/internal/controller"
+	"github.com/dxpglobal/ai-gateway/backend/internal/entity"
+	"github.com/dxpglobal/ai-gateway/backend/internal/integration/credentials"
+	"github.com/dxpglobal/ai-gateway/backend/internal/integration/newapi"
 	"github.com/dxpglobal/ai-gateway/backend/internal/middleware"
 	"github.com/dxpglobal/ai-gateway/backend/internal/pkg/config"
 	"github.com/dxpglobal/ai-gateway/backend/internal/pkg/geoip"
@@ -23,6 +29,7 @@ import (
 	"github.com/dxpglobal/ai-gateway/backend/internal/pkg/oauth"
 	"github.com/dxpglobal/ai-gateway/backend/internal/repository/postgres"
 	"github.com/dxpglobal/ai-gateway/backend/internal/usecase"
+	"github.com/dxpglobal/ai-gateway/backend/internal/worker"
 )
 
 func main() {
@@ -41,7 +48,7 @@ func main() {
 	}
 
 	if err := runMigrations(cfg.DatabaseURL); err != nil {
-		log.Printf("migrate: %v (continuing)", err)
+		log.Fatalf("migrate: %v", err)
 	}
 
 	pool, err := pgxpool.New(context.Background(), cfg.DatabaseURL)
@@ -85,8 +92,29 @@ func main() {
 	settings := postgres.NewSettingsRepo(pool)
 	codes := postgres.NewMagicCodeRepo(pool)
 	audit := postgres.NewLoginAuditRepo(pool)
+	externalAccounts := postgres.NewExternalSiteAccountRepo(pool)
 
-	authUC := usecase.NewAuthUsecase(users, methods, sessions, settings, codes, audit, mailer, geoip.NewHTTPResolver())
+	credentialCipher, err := credentials.NewCipher(cfg.ExternalPasswordEncryptionKey)
+	if err != nil {
+		log.Fatalf("external credentials: %v", err)
+	}
+	accountFactory, err := credentials.NewAccountFactory(credentialCipher, []entity.ExternalSite{entity.ExternalSiteTPAI, entity.ExternalSiteAPAI})
+	if err != nil {
+		log.Fatalf("external accounts: %v", err)
+	}
+	tpaiClient, err := newapi.NewClient(cfg.TPAI.BaseURL, cfg.TPAI.AdminToken, 10*time.Second)
+	if err != nil {
+		log.Fatalf("TPAI client: %v", err)
+	}
+	apaiClient, err := newapi.NewClient(cfg.APAI.BaseURL, cfg.APAI.AdminToken, 10*time.Second)
+	if err != nil {
+		log.Fatalf("APAI client: %v", err)
+	}
+
+	authUC := usecase.NewAuthUsecase(
+		users, methods, sessions, settings, codes, audit, mailer, geoip.NewHTTPResolver(),
+		usecase.WithNewAccountProvisioning(externalAccounts, accountFactory),
+	)
 	profileUC := usecase.NewProfileUsecase(users, methods, sessions, settings)
 	settingsUC := usecase.NewSettingsUsecase(settings, users)
 
@@ -142,11 +170,42 @@ func main() {
 		}
 	}
 
-	addr := cfg.HTTPAddr
-	log.Printf("listening on %s", addr)
-	if err := r.Run(addr); err != nil {
-		log.Fatal(err)
+	externalWorker, err := worker.NewExternalSiteAccountWorker(externalAccounts, credentialCipher, map[entity.ExternalSite]worker.UserCreator{
+		entity.ExternalSiteTPAI: tpaiClient,
+		entity.ExternalSiteAPAI: apaiClient,
+	})
+	if err != nil {
+		log.Fatalf("external account worker: %v", err)
 	}
+
+	appCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	workerDone := externalWorker.Start(appCtx)
+
+	server := &http.Server{
+		Addr:              cfg.HTTPAddr,
+		Handler:           r,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+	serverErrors := make(chan error, 1)
+	go func() {
+		log.Printf("listening on %s", cfg.HTTPAddr)
+		serverErrors <- server.ListenAndServe()
+	}()
+
+	select {
+	case err := <-serverErrors:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Printf("server: %v", err)
+		}
+	case <-appCtx.Done():
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			log.Printf("server shutdown: %v", err)
+		}
+		cancel()
+	}
+	stop()
+	<-workerDone
 }
 
 func runMigrations(databaseURL string) error {

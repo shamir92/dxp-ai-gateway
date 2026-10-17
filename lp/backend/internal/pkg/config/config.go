@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"strconv"
@@ -8,25 +9,33 @@ import (
 )
 
 type Config struct {
-	HTTPAddr           string
-	DatabaseURL        string
-	SessionCookieName  string
-	SessionTTLDays     int
-	GoogleClientID     string
-	GoogleClientSecret string
-	GoogleRedirectURL  string
-	GithubClientID     string
-	GithubClientSecret string
-	GithubRedirectURL  string
-	SMTPHost           string
-	SMTPPort           int
-	SMTPUsername       string
-	SMTPPassword       string
-	SMTPFrom           string
-	SMTPFromName       string
-	SMTPTLS            string // starttls | tls | none
-	MailBackend        string // smtp | console
-	PublicWebURL       string
+	HTTPAddr                      string
+	DatabaseURL                   string
+	SessionCookieName             string
+	SessionTTLDays                int
+	GoogleClientID                string
+	GoogleClientSecret            string
+	GoogleRedirectURL             string
+	GithubClientID                string
+	GithubClientSecret            string
+	GithubRedirectURL             string
+	SMTPHost                      string
+	SMTPPort                      int
+	SMTPUsername                  string
+	SMTPPassword                  string
+	SMTPFrom                      string
+	SMTPFromName                  string
+	SMTPTLS                       string // starttls | tls | none
+	MailBackend                   string // smtp | console
+	PublicWebURL                  string
+	TPAI                          ExternalSite
+	APAI                          ExternalSite
+	ExternalPasswordEncryptionKey []byte
+}
+
+type ExternalSite struct {
+	BaseURL    string
+	AdminToken string
 }
 
 func Load() (*Config, error) {
@@ -58,10 +67,32 @@ func Load() (*Config, error) {
 		SMTPTLS:            getenv("SMTP_TLS", "starttls"),
 		MailBackend:        getenv("MAIL_BACKEND", "smtp"),
 		PublicWebURL:       getenv("PUBLIC_WEB_URL", "http://localhost:3000"),
+		TPAI: ExternalSite{
+			BaseURL:    strings.TrimRight(strings.TrimSpace(os.Getenv("TPAI_BASE_URL")), "/"),
+			AdminToken: strings.TrimSpace(os.Getenv("TPAI_ADMIN_TOKEN")),
+		},
+		APAI: ExternalSite{
+			BaseURL:    strings.TrimRight(strings.TrimSpace(os.Getenv("APAI_BASE_URL")), "/"),
+			AdminToken: strings.TrimSpace(os.Getenv("APAI_ADMIN_TOKEN")),
+		},
 	}
 	if cfg.DatabaseURL == "" {
 		return nil, fmt.Errorf("DATABASE_URL is required")
 	}
+	for name, site := range map[string]ExternalSite{"TPAI": cfg.TPAI, "APAI": cfg.APAI} {
+		if site.BaseURL == "" || site.AdminToken == "" {
+			return nil, fmt.Errorf("%s_BASE_URL and %s_ADMIN_TOKEN are required", name, name)
+		}
+	}
+	keyText := strings.TrimSpace(os.Getenv("EXTERNAL_PASSWORD_ENCRYPTION_KEY"))
+	if keyText == "" {
+		return nil, fmt.Errorf("EXTERNAL_PASSWORD_ENCRYPTION_KEY is required")
+	}
+	key, err := base64.StdEncoding.DecodeString(keyText)
+	if err != nil || len(key) != 32 {
+		return nil, fmt.Errorf("EXTERNAL_PASSWORD_ENCRYPTION_KEY must be base64-encoded 32-byte key")
+	}
+	cfg.ExternalPasswordEncryptionKey = key
 	return cfg, nil
 }
 

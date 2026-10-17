@@ -133,23 +133,24 @@ func (u *AuthUsecase) VerifyMagicCode(ctx context.Context, email, code string, p
 		return nil, err
 	}
 	user, err := u.users.GetByEmail(ctx, email)
+	created := false
 	if errors.Is(err, repository.ErrNotFound) {
 		if purpose == entity.PurposeLogin {
 			return nil, ErrNoAccount
 		}
 		user = &entity.User{Email: email, Name: strings.TrimSpace(storedName)}
-		if err := u.users.Create(ctx, user); err != nil {
+		method := &entity.AuthMethod{UserID: user.ID, Provider: entity.ProviderEmail, ProviderUserID: email, Email: email}
+		if err := u.createNewAccount(ctx, user, method); err != nil {
 			return nil, err
 		}
-		def := entity.DefaultSettings(user.ID)
-		if err := u.settings.Upsert(ctx, &def); err != nil {
-			return nil, err
-		}
+		created = true
 	} else if err != nil {
 		return nil, err
 	}
-	if err := u.methods.Upsert(ctx, &entity.AuthMethod{UserID: user.ID, Provider: entity.ProviderEmail, ProviderUserID: email, Email: email}); err != nil {
-		return nil, err
+	if !created {
+		if err := u.methods.Upsert(ctx, &entity.AuthMethod{UserID: user.ID, Provider: entity.ProviderEmail, ProviderUserID: email, Email: email}); err != nil {
+			return nil, err
+		}
 	}
 	return u.issueSession(ctx, user, meta)
 }
