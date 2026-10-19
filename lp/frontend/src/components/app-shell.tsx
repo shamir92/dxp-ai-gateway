@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Gift } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BrandMark } from "@/components/brand";
 
@@ -11,7 +10,9 @@ const sections = [
     label: "WORKSPACE",
     items: [
       { label: "Token plan", href: "/token-plan" },
-      { label: "API plan", href: "/api-plan" },
+      // Not released yet: shown so the surface is discoverable, but inert — the
+      // page behind it is still under construction.
+      { label: "API plan", href: "/api-plan", disabled: true },
       // Hidden until implemented: the Plugins page and /plugins route still exist.
     ],
   },
@@ -56,6 +57,20 @@ export function AppSidebar() {
                   pathname === item.href ||
                   pathname.startsWith(item.href + "/") ||
                   (item.href === "/token-plan" && pathname === "/consumption");
+                if (item.disabled) {
+                  return (
+                    <span
+                      key={item.href}
+                      aria-disabled="true"
+                      className="flex cursor-not-allowed items-center justify-between rounded-lg px-3 py-2.5 text-[13px] text-[#AEB8C8]/50 select-none"
+                    >
+                      {item.label}
+                      <span className="rounded-full bg-white/10 px-2 py-0.5 text-[9px] font-medium tracking-wide text-[#AEB8C8] uppercase">
+                        Coming soon
+                      </span>
+                    </span>
+                  );
+                }
                 return (
                   <Link
                     key={item.href}
@@ -75,17 +90,6 @@ export function AppSidebar() {
           </div>
         ))}
       </nav>
-
-      <div className="mt-auto rounded-xl bg-prompt p-3.5">
-        <Gift className="size-5 text-[#FFD29A]" />
-        <p className="mt-2.5 text-[12px] font-medium text-white">Build with your team</p>
-        <p className="mt-1 text-[10px] leading-relaxed text-[#91A0B6]">
-          Invite collaborators and share one workspace.
-        </p>
-        <button className="mt-3 w-full rounded-lg bg-white py-2 text-[11px] font-medium text-night-card">
-          Invite members
-        </button>
-      </div>
     </aside>
   );
 }
@@ -98,6 +102,17 @@ function AppMobileNav() {
     <nav aria-label="Workspace navigation" className="flex gap-1 overflow-x-auto border-b border-line-warm bg-night-card px-3 py-2 md:hidden">
       {items.map((item) => {
         const active = pathname === item.href || (item.href === "/token-plan" && pathname === "/consumption");
+        if (item.disabled) {
+          return (
+            <span
+              key={item.href}
+              aria-disabled="true"
+              className="shrink-0 cursor-not-allowed rounded-full px-3 py-2 text-[11px] text-[#AEB8C8]/50 select-none"
+            >
+              {item.label} · coming soon
+            </span>
+          );
+        }
         return (
           <Link
             key={item.href}

@@ -1,0 +1,22 @@
+# Keep the build context small and never ship secrets into an image layer.
+.env
+.env.*
+!.env.example
+
+# Local build output
+bin/
+*.exe
+
+# Tests and tooling that are not needed at runtime
+*_test.go
+docker-compose.yml
+
+# VCS and editor noise
+.git
+.gitignore
+.idea
+.vscode
+.DS_Store
+
+# Docs
+*.md
