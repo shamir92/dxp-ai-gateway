@@ -57,6 +57,10 @@ landing-page/preview/
 frontend/reference/
 *.local.html
 
+# Screenshots dropped at the repo root while reviewing the UI
+/Screenshot*.png
+/image.png
+
 # Python (if any helper scripts)
 __pycache__/
 *.pyc
