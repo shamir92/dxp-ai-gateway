@@ -56,6 +56,39 @@ func (c *Cipher) Decrypt(userID uuid.UUID, site entity.ExternalSite, ciphertext,
 	return plaintext, nil
 }
 
+// EncryptAccessToken seals a personal access token. Its associated data carries a
+// distinct purpose label, so a token ciphertext can never be accepted where a
+// password ciphertext is expected (and vice versa).
+func (c *Cipher) EncryptAccessToken(userID uuid.UUID, site entity.ExternalSite, plaintext []byte) (ciphertext, nonce []byte, keyVersion string, err error) {
+	nonce = make([]byte, c.aead.NonceSize())
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return nil, nil, "", fmt.Errorf("generate encryption nonce: %w", err)
+	}
+	ciphertext = c.aead.Seal(nil, nonce, plaintext, accessTokenAssociatedData(userID, site))
+	return ciphertext, nonce, KeyVersion, nil
+}
+
+// DecryptAccessToken opens a token sealed by EncryptAccessToken.
+func (c *Cipher) DecryptAccessToken(userID uuid.UUID, site entity.ExternalSite, ciphertext, nonce []byte, keyVersion string) ([]byte, error) {
+	if keyVersion != KeyVersion {
+		return nil, fmt.Errorf("unsupported encryption key version")
+	}
+	if len(nonce) != c.aead.NonceSize() {
+		return nil, fmt.Errorf("invalid encrypted credential")
+	}
+	plaintext, err := c.aead.Open(nil, nonce, ciphertext, accessTokenAssociatedData(userID, site))
+	if err != nil {
+		return nil, fmt.Errorf("decrypt access token")
+	}
+	return plaintext, nil
+}
+
+// associatedData is the password binding. Do not change it: every stored password
+// was sealed with exactly this value.
 func associatedData(userID uuid.UUID, site entity.ExternalSite) []byte {
 	return []byte(KeyVersion + ":" + userID.String() + ":" + string(site))
+}
+
+func accessTokenAssociatedData(userID uuid.UUID, site entity.ExternalSite) []byte {
+	return []byte(KeyVersion + ":" + userID.String() + ":" + string(site) + ":access_token")
 }

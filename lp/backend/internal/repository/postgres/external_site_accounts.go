@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -196,5 +197,169 @@ func scanExternalSiteAccount(row rowScanner) (entity.ExternalSiteAccount, error)
 	return account, nil
 }
 
+// GetAccessToken returns the stored access token for one (user, site). A row with
+// no ciphertext, an unreadable key version, or a non-active status is reported as
+// not found so the caller mints a fresh token instead of failing.
+func (r *ExternalSiteAccountRepo) GetAccessToken(ctx context.Context, userID uuid.UUID, site entity.ExternalSite) (*entity.StoredAccessToken, error) {
+	var (
+		ciphertext []byte
+		nonce      []byte
+		keyVersion pgtype.Text
+		expiresAt  pgtype.Timestamptz
+		remoteID   pgtype.Text
+		status     string
+	)
+	err := r.pool.QueryRow(ctx, `
+		SELECT access_token_ciphertext, access_token_nonce, access_token_key_version,
+		       access_token_expires_at, access_token_remote_id, access_token_status
+		FROM external_site_accounts
+		WHERE user_id = $1 AND site = $2`, userID, site).
+		Scan(&ciphertext, &nonce, &keyVersion, &expiresAt, &remoteID, &status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, repository.ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if len(ciphertext) == 0 || !keyVersion.Valid || status != string(entity.AccessTokenActive) {
+		return nil, repository.ErrNotFound
+	}
+
+	token := &entity.StoredAccessToken{
+		UserID:     userID,
+		Site:       site,
+		Ciphertext: ciphertext,
+		Nonce:      nonce,
+		KeyVersion: keyVersion.String,
+		RemoteID:   remoteID.String,
+		Status:     entity.AccessTokenStatus(status),
+	}
+	if expiresAt.Valid {
+		expires := expiresAt.Time
+		token.ExpiresAt = &expires
+	}
+	return token, nil
+}
+
+// SaveAccessToken stores a freshly minted access token, replacing any previous one.
+func (r *ExternalSiteAccountRepo) SaveAccessToken(ctx context.Context, token *entity.StoredAccessToken) error {
+	if token == nil {
+		return fmt.Errorf("stored access token is required")
+	}
+	var expiresAt any
+	if token.ExpiresAt != nil {
+		expiresAt = *token.ExpiresAt
+	}
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE external_site_accounts
+		SET access_token_ciphertext = $3, access_token_nonce = $4, access_token_key_version = $5,
+		    access_token_expires_at = $6, access_token_remote_id = NULLIF($7, ''), access_token_status = $8,
+		    updated_at = now()
+		WHERE user_id = $1 AND site = $2`,
+		token.UserID, token.Site, token.Ciphertext, token.Nonce, token.KeyVersion,
+		expiresAt, token.RemoteID, string(token.Status))
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return repository.ErrNotFound
+	}
+	return nil
+}
+
+// ClearAccessToken discards a token the upstream rejected, so the next request
+// mints a new one.
+func (r *ExternalSiteAccountRepo) ClearAccessToken(ctx context.Context, userID uuid.UUID, site entity.ExternalSite) error {
+	_, err := r.pool.Exec(ctx, `
+		UPDATE external_site_accounts
+		SET access_token_ciphertext = NULL, access_token_nonce = NULL, access_token_key_version = NULL,
+		    access_token_expires_at = NULL, access_token_remote_id = NULL,
+		    access_token_status = 'invalid', updated_at = now()
+		WHERE user_id = $1 AND site = $2`, userID, site)
+	return err
+}
+
+// GetByUserAndSite reads one user's provisioned account on a site, including the
+// encrypted password needed to mint an access token.
+func (r *ExternalSiteAccountRepo) GetByUserAndSite(ctx context.Context, userID uuid.UUID, site entity.ExternalSite) (*entity.ExternalSiteAccount, error) {
+	row := r.pool.QueryRow(ctx, `
+		SELECT id, user_id, site, username, display_name, password_ciphertext, password_nonce,
+		       encryption_key_version, remote_user_id, status, attempt_count, next_attempt_at,
+		       lease_token, lease_expires_at, last_error, created_at, updated_at, provisioned_at
+		FROM external_site_accounts
+		WHERE user_id = $1 AND site = $2`, userID, site)
+	account, err := scanExternalSiteAccount(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, repository.ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &account, nil
+}
+
+// EnsurePending inserts per-site account rows for a user that has none, leaving
+// existing rows untouched. This backfills a user who predates the provisioning
+// flow so the worker can create their remote accounts; it is safe to call often.
+func (r *ExternalSiteAccountRepo) EnsurePending(ctx context.Context, accounts []entity.ExternalSiteAccount) error {
+	if len(accounts) == 0 {
+		return nil
+	}
+	now := time.Now().UTC()
+	for i := range accounts {
+		account := &accounts[i]
+		if account.UserID == uuid.Nil {
+			return fmt.Errorf("external site account requires a user")
+		}
+		if account.ID == uuid.Nil {
+			account.ID = uuid.New()
+		}
+		if account.CreatedAt.IsZero() {
+			account.CreatedAt = now
+		}
+		account.UpdatedAt = now
+		if account.Status == "" {
+			account.Status = entity.ExternalAccountPending
+		}
+		if account.NextAttemptAt.IsZero() {
+			account.NextAttemptAt = now
+		}
+		if _, err := r.pool.Exec(ctx, `
+			INSERT INTO external_site_accounts (
+				id, user_id, site, username, display_name, password_ciphertext, password_nonce,
+				encryption_key_version, status, attempt_count, next_attempt_at, last_error, created_at, updated_at
+			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+			ON CONFLICT (user_id, site) DO NOTHING`,
+			account.ID, account.UserID, account.Site, account.Username, account.DisplayName,
+			account.PasswordCiphertext, account.PasswordNonce, account.EncryptionKeyVersion,
+			account.Status, account.AttemptCount, account.NextAttemptAt, account.LastError,
+			account.CreatedAt, account.UpdatedAt); err != nil {
+			return fmt.Errorf("ensure external site account: %w", err)
+		}
+	}
+	return nil
+}
+
+// Requeue puts a provisioned-but-unusable row back in the worker's queue so the
+// remote account gets recreated. Only rows the worker believes are provisioned
+// are touched, and only while attempt_count is under maxAttempts, so a
+// permanently broken account cannot loop forever.
+func (r *ExternalSiteAccountRepo) Requeue(ctx context.Context, userID uuid.UUID, site entity.ExternalSite, maxAttempts int) (bool, error) {
+	if maxAttempts <= 0 {
+		maxAttempts = 5
+	}
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE external_site_accounts
+		SET status = 'pending', next_attempt_at = now(), lease_token = NULL, lease_expires_at = NULL,
+		    provisioned_at = NULL, last_error = '', updated_at = now()
+		WHERE user_id = $1 AND site = $2 AND status = 'provisioned' AND attempt_count < $3`,
+		userID, site, maxAttempts)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() > 0, nil
+}
+
 var _ repository.NewAccountRepo = (*ExternalSiteAccountRepo)(nil)
 var _ repository.ExternalSiteAccountRepo = (*ExternalSiteAccountRepo)(nil)
+var _ repository.AccessTokenRepo = (*ExternalSiteAccountRepo)(nil)

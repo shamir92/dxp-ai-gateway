@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -17,10 +18,11 @@ type ProfileController struct {
 	auth    *usecase.AuthUsecase
 	google  *oauth.GoogleProvider
 	github  *oauth.GithubProvider
+	apiKeys *usecase.APIKeyUsecase
 }
 
-func NewProfileController(profile *usecase.ProfileUsecase, auth *usecase.AuthUsecase, google *oauth.GoogleProvider, github *oauth.GithubProvider) *ProfileController {
-	return &ProfileController{profile: profile, auth: auth, google: google, github: github}
+func NewProfileController(profile *usecase.ProfileUsecase, auth *usecase.AuthUsecase, google *oauth.GoogleProvider, github *oauth.GithubProvider, apiKeys *usecase.APIKeyUsecase) *ProfileController {
+	return &ProfileController{profile: profile, auth: auth, google: google, github: github, apiKeys: apiKeys}
 }
 
 func (h *ProfileController) Get(c *gin.Context) {
@@ -49,6 +51,13 @@ func (h *ProfileController) Patch(c *gin.Context) {
 	if err != nil {
 		writeErr(c, err)
 		return
+	}
+	// Saving profile changes is also a chance to backfill a user whose external
+	// accounts were never created. Best effort: the update already succeeded.
+	if h.apiKeys != nil {
+		if err := h.apiKeys.EnsureProvisioned(c.Request.Context(), userID); err != nil {
+			log.Printf("profile: external account backfill failed for user %s", userID)
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{"user": user})
 }

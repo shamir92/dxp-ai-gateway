@@ -14,8 +14,27 @@ import (
 )
 
 const (
-	createUserPath = "/api/user/"
-	maxDrainBytes  = 64 * 1024
+	createUserPath             = "/api/user/"
+	maxDrainBytes              = 64 * 1024
+	loginPath                  = "/api/user/login"
+	verifyPath                 = "/api/verify"
+	accessTokensPath           = "/api/user/access_tokens"
+	tokenPath                  = "/api/token/"
+	subscriptionSelfPath       = "/api/subscription/self"
+	statusPath                 = "/api/status"
+	proofHeader                = "X-Security-Proof"
+	verificationMethodPassword = "password"
+	sessionMarkerCookie        = "new_api_has_session=1"
+)
+
+// Access-token scopes the gateway requests. The gateway never asks for more than
+// it needs: read/write its own API keys and read subscription usage.
+const (
+	ScopeAPIKeyRead          = "api_key:read"
+	ScopeAPIKeyWrite         = "api_key:write"
+	ScopeAPIKeyReveal        = "api_key:reveal"
+	ScopeWalletRead          = "wallet:read"
+	ScopeAccessTokenGenerate = "access_token.generate"
 )
 
 type Client struct {
@@ -26,12 +45,32 @@ type Client struct {
 
 type APIError struct {
 	StatusCode int
+	Code       string
+	Message    string
 	RetryAfter time.Duration
 	Retryable  bool
 }
 
 func (e *APIError) Error() string {
-	return fmt.Sprintf("external API returned HTTP %d", e.StatusCode)
+	// Include the upstream code/message: without it a rejected call is
+	// indistinguishable from any other 4xx, which makes diagnosis impossible.
+	detail := strings.TrimSpace(e.Message)
+	if detail == "" {
+		detail = strings.TrimSpace(e.Code)
+	}
+	if detail == "" {
+		return fmt.Sprintf("external API returned HTTP %d", e.StatusCode)
+	}
+	if e.Code != "" && e.Message != "" {
+		return fmt.Sprintf("external API returned HTTP %d (%s): %s", e.StatusCode, e.Code, e.Message)
+	}
+	return fmt.Sprintf("external API returned HTTP %d: %s", e.StatusCode, detail)
+}
+
+// Unauthorized reports whether the upstream rejected the supplied bearer, which
+// means a stored access token is no longer usable.
+func (e *APIError) Unauthorized() bool {
+	return e.StatusCode == http.StatusUnauthorized || e.StatusCode == http.StatusForbidden
 }
 
 func NewClient(baseURL, adminToken string, timeout time.Duration) (*Client, error) {
@@ -61,6 +100,123 @@ func NewClient(baseURL, adminToken string, timeout time.Duration) (*Client, erro
 	}, nil
 }
 
+// envelope is the new-api response wrapper. Branch on Success, never on the HTTP
+// status: business errors are returned with HTTP 200 and success=false.
+type envelope struct {
+	Success bool            `json:"success"`
+	Message string          `json:"message"`
+	Code    string          `json:"code"`
+	Data    json.RawMessage `json:"data"`
+}
+
+type requestOptions struct {
+	method  string
+	path    string
+	bearer  string
+	referer string
+	body    any
+	headers map[string]string
+}
+
+// do performs one JSON request and returns the raw `data` field. It never logs or
+// returns the request body, so credentials/keys cannot leak through it.
+func (c *Client) do(ctx context.Context, opts requestOptions) (json.RawMessage, error) {
+	var reader io.Reader
+	if opts.body != nil {
+		payload, err := json.Marshal(opts.body)
+		if err != nil {
+			return nil, fmt.Errorf("encode external request")
+		}
+		defer clear(payload)
+		reader = bytes.NewReader(payload)
+	}
+	req, err := http.NewRequestWithContext(ctx, opts.method, c.baseURL+opts.path, reader)
+	if err != nil {
+		return nil, fmt.Errorf("create external request")
+	}
+	if opts.bearer != "" {
+		req.Header.Set("Authorization", "Bearer "+opts.bearer)
+	}
+	req.Header.Set("Accept", "application/json")
+	if opts.body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	req.Header.Set("Origin", c.baseURL)
+	referer := opts.referer
+	if referer == "" {
+		referer = "/"
+	}
+	req.Header.Set("Referer", c.baseURL+referer)
+	req.Header.Set("Cookie", sessionMarkerCookie)
+	for name, value := range opts.headers {
+		req.Header.Set(name, value)
+	}
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("external request failed")
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxDrainBytes))
+	if err != nil {
+		return nil, fmt.Errorf("read external response")
+	}
+
+	apiError := func(code, message string) *APIError {
+		e := &APIError{StatusCode: resp.StatusCode, Code: code, Message: message}
+		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= http.StatusInternalServerError {
+			e.Retryable = true
+			e.RetryAfter = parseRetryAfter(resp.Header.Get("Retry-After"), time.Now())
+		}
+		return e
+	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return nil, apiError("", "")
+	}
+
+	var env envelope
+	if len(bytes.TrimSpace(raw)) > 0 {
+		if err := json.Unmarshal(raw, &env); err != nil {
+			return nil, fmt.Errorf("decode external response")
+		}
+	}
+	if !env.Success {
+		return nil, apiError(env.Code, env.Message)
+	}
+	return env.Data, nil
+}
+
+// APIInfo is one advertised API address from GET /api/status.
+type APIInfo struct {
+	ID          int    `json:"id"`
+	Color       string `json:"color"`
+	Description string `json:"description"`
+	Route       string `json:"route"`
+	URL         string `json:"url"`
+}
+
+type Status struct {
+	APIInfo []APIInfo `json:"api_info"`
+}
+
+// Status is public: it needs no bearer and supplies the API address list.
+func (c *Client) Status(ctx context.Context) (Status, error) {
+	data, err := c.do(ctx, requestOptions{method: http.MethodGet, path: statusPath})
+	if err != nil {
+		return Status{}, err
+	}
+	var status Status
+	if err := json.Unmarshal(data, &status); err != nil {
+		return Status{}, fmt.Errorf("decode status response")
+	}
+	return status, nil
+}
+
+// CreateUser provisions a remote user with the site admin bearer.
+//
+// new-api reports business failures as HTTP 200 with success=false, so the
+// response envelope MUST be checked. Treating any 2xx as success marked accounts
+// provisioned that were never created — which later surfaced as a login failure.
 func (c *Client) CreateUser(ctx context.Context, username, displayName string, password []byte) error {
 	payload := struct {
 		Username    string `json:"username"`
@@ -68,37 +224,15 @@ func (c *Client) CreateUser(ctx context.Context, username, displayName string, p
 		Password    string `json:"password"`
 		Role        int    `json:"role"`
 	}{Username: username, DisplayName: displayName, Password: string(password), Role: 1}
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("encode external account request")
-	}
-	defer clear(body)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+createUserPath, bytes.NewReader(body))
-	if err != nil {
-		return fmt.Errorf("create external account request")
-	}
-	req.Header.Set("Authorization", "Bearer "+c.adminToken)
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Origin", c.baseURL)
-	req.Header.Set("Referer", c.baseURL+"/users")
-	req.Header.Set("Cookie", "new_api_has_session=1")
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return fmt.Errorf("external account request failed")
-	}
-	defer resp.Body.Close()
-	_, _ = io.CopyN(io.Discard, resp.Body, maxDrainBytes)
-	if resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices {
-		return nil
-	}
-	apiErr := &APIError{StatusCode: resp.StatusCode}
-	if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= http.StatusInternalServerError {
-		apiErr.Retryable = true
-		apiErr.RetryAfter = parseRetryAfter(resp.Header.Get("Retry-After"), time.Now())
-	}
-	return apiErr
+	_, err := c.do(ctx, requestOptions{
+		method:  http.MethodPost,
+		path:    createUserPath,
+		bearer:  c.adminToken,
+		referer: "/users",
+		body:    payload,
+	})
+	return err
 }
 
 func parseRetryAfter(value string, now time.Time) time.Duration {

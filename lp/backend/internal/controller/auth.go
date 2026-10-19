@@ -33,6 +33,16 @@ func writeErr(c *gin.Context, err error) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "no_account", "message": "No account for this email. Create one first."}})
 	case errors.Is(err, usecase.ErrAccountExists):
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "account_exists", "message": "Account already exists. Log in instead."}})
+	case errors.Is(err, usecase.ErrUnsupportedSite):
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "site_unsupported", "message": "unsupported external site"}})
+	case errors.Is(err, usecase.ErrExternalAccountMissing):
+		c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "external_account_missing", "message": "your account is still being provisioned on this platform"}})
+	case errors.Is(err, usecase.ErrExternalCredentials):
+		c.JSON(http.StatusBadGateway, gin.H{"error": gin.H{"code": "external_credentials", "message": "the external platform rejected our credentials"}})
+	case errors.Is(err, usecase.ErrExternalRejected):
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "external_rejected", "message": "the external platform rejected the request"}})
+	case errors.Is(err, usecase.ErrExternalUnavailable):
+		c.JSON(http.StatusBadGateway, gin.H{"error": gin.H{"code": "external_unavailable", "message": "the external platform is unavailable"}})
 	default:
 		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "internal", "message": "internal error"}})
 	}

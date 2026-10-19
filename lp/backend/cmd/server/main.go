@@ -117,6 +117,10 @@ func main() {
 	)
 	profileUC := usecase.NewProfileUsecase(users, methods, sessions, settings)
 	settingsUC := usecase.NewSettingsUsecase(settings, users)
+	apiKeyUC := usecase.NewAPIKeyUsecase(users, externalAccounts, externalAccounts, credentialCipher, accountFactory, map[entity.ExternalSite]usecase.SiteClient{
+		entity.ExternalSiteTPAI: tpaiClient,
+		entity.ExternalSiteAPAI: apaiClient,
+	})
 
 	google := oauth.NewGoogle(oauth.ProviderConfig{
 		ClientID:     cfg.GoogleClientID,
@@ -131,8 +135,9 @@ func main() {
 
 	sessionsMW := middleware.NewSessionAuth(authUC, cfg.SessionCookieName, cfg.SessionTTLDays)
 	authH := controller.NewAuthController(authUC, sessionsMW, google, github, cfg.PublicWebURL)
-	profileH := controller.NewProfileController(profileUC, authUC, google, github)
+	profileH := controller.NewProfileController(profileUC, authUC, google, github, apiKeyUC)
 	settingsH := controller.NewSettingsController(settingsUC)
+	apiKeysH := controller.NewAPIKeyController(apiKeyUC)
 
 	r := gin.Default()
 	r.GET("/healthz", func(c *gin.Context) {
@@ -167,6 +172,16 @@ func main() {
 
 			authed.GET("/settings", settingsH.Get)
 			authed.PATCH("/settings", settingsH.Patch)
+
+			// API keys and subscription usage are proxied with one stored per-user
+			// access token. The path uses a neutral product slug so the upstream
+			// platform is never named in a URL: tp_ = token plan.
+			authed.GET("/profile/tp_api_keys", controller.WithSite(entity.ExternalSiteTPAI), apiKeysH.List)
+			authed.POST("/profile/tp_api_keys", controller.WithSite(entity.ExternalSiteTPAI), apiKeysH.Create)
+			authed.PUT("/profile/tp_api_keys/:id", controller.WithSite(entity.ExternalSiteTPAI), apiKeysH.Update)
+			authed.DELETE("/profile/tp_api_keys/:id", controller.WithSite(entity.ExternalSiteTPAI), apiKeysH.Delete)
+			authed.GET("/profile/tp_subscription", controller.WithSite(entity.ExternalSiteTPAI), apiKeysH.Subscription)
+			authed.GET("/profile/tp_endpoints", controller.WithSite(entity.ExternalSiteTPAI), apiKeysH.Endpoints)
 		}
 	}
 

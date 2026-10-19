@@ -42,3 +42,25 @@ type ExternalSiteAccount struct {
 	UpdatedAt            time.Time
 	ProvisionedAt        *time.Time
 }
+
+// AccessTokenStatus tracks whether the stored personal access token is usable.
+type AccessTokenStatus string
+
+const (
+	AccessTokenNone    AccessTokenStatus = "none"
+	AccessTokenActive  AccessTokenStatus = "active"
+	AccessTokenInvalid AccessTokenStatus = "invalid"
+)
+
+// StoredAccessToken is the encrypted personal access token ("nap_…") for one
+// (user, site). The plaintext never leaves the backend process.
+type StoredAccessToken struct {
+	UserID     uuid.UUID
+	Site       ExternalSite
+	Ciphertext []byte
+	Nonce      []byte
+	KeyVersion string
+	ExpiresAt  *time.Time // nil means the token never expires.
+	RemoteID   string
+	Status     AccessTokenStatus
+}

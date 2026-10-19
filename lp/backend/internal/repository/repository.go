@@ -63,13 +63,35 @@ type ExternalSiteAccountRepo interface {
 	MarkProvisioned(ctx context.Context, id, leaseToken uuid.UUID, remoteUserID string, at time.Time) error
 	MarkRetry(ctx context.Context, id, leaseToken uuid.UUID, nextAttemptAt time.Time, summary string, at time.Time) error
 	MarkFailed(ctx context.Context, id, leaseToken uuid.UUID, summary string, at time.Time) error
+	// GetByUserAndSite reads one user's provisioned account so a caller can obtain
+	// the remote username and the encrypted site password.
+	GetByUserAndSite(ctx context.Context, userID uuid.UUID, site entity.ExternalSite) (*entity.ExternalSiteAccount, error)
+	// EnsurePending inserts the given per-site rows for a user that has none,
+	// leaving existing rows untouched. It backfills users who predate the
+	// provisioning flow so the worker can create their remote accounts.
+	EnsurePending(ctx context.Context, accounts []entity.ExternalSiteAccount) error
+	// Requeue marks a row provisioned-but-unusable for provisioning again, which is
+	// how a remote account that no longer exists gets recreated. It reports whether
+	// a row was actually requeued and only touches rows the worker believes are
+	// provisioned, up to maxAttempts.
+	Requeue(ctx context.Context, userID uuid.UUID, site entity.ExternalSite, maxAttempts int) (bool, error)
+}
+
+// AccessTokenRepo stores the encrypted personal access token ("nap_…") the
+// gateway reuses for per-user calls to an external site. It never exposes a
+// plaintext token.
+type AccessTokenRepo interface {
+	GetAccessToken(ctx context.Context, userID uuid.UUID, site entity.ExternalSite) (*entity.StoredAccessToken, error)
+	SaveAccessToken(ctx context.Context, token *entity.StoredAccessToken) error
+	ClearAccessToken(ctx context.Context, userID uuid.UUID, site entity.ExternalSite) error
 }
 
 type Repos struct {
-	Users       UserRepo
-	AuthMethods AuthMethodRepo
-	Sessions    SessionRepo
-	Settings    SettingsRepo
-	MagicCodes  MagicCodeRepo
-	LoginAudit  LoginAuditRepo
+	Users        UserRepo
+	AuthMethods  AuthMethodRepo
+	Sessions     SessionRepo
+	Settings     SettingsRepo
+	MagicCodes   MagicCodeRepo
+	LoginAudit   LoginAuditRepo
+	AccessTokens AccessTokenRepo
 }
