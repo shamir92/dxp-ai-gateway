@@ -1,4 +1,4 @@
-import { ArrowRight, Clock, Mail, MessageCircle, BookOpen, Key, CreditCard, LifeBuoy, Users } from "lucide-react";
+import { ArrowRight, Clock, Mail, MessageCircle } from "lucide-react";
 import { ButtonLink } from "@/components/button-link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AppShell } from "@/components/app-shell";
@@ -28,13 +28,7 @@ const channels = [
   },
 ];
 
-const topics = [
-  { icon: Key, title: "API & authentication", desc: "Keys, endpoints, SDK setup" },
-  { icon: BookOpen, title: "Models & tokens", desc: "Selection, limits, and consumption" },
-  { icon: LifeBuoy, title: "Batch jobs", desc: "Input files, status, retries" },
-  { icon: CreditCard, title: "Balance & billing", desc: "Funding, invoices, refunds" },
-  { icon: Users, title: "Account & security", desc: "Profile, login, and 2FA" },
-];
+
 
 export default function SupportPage() {
   return (
@@ -81,29 +75,6 @@ export default function SupportPage() {
                 <Clock className="size-3.5" />
                 Typical first response: under 4 hours on business days.
               </p>
-            </CardContent>
-          </Card>
-
-          <Card className="border-line-warm bg-white">
-            <CardHeader>
-              <CardTitle className="text-[15px]">What we can help with</CardTitle>
-              <p className="mt-1 text-[12px] text-muted-warm">
-                Mention the topic in your message so it reaches the right person.
-              </p>
-            </CardHeader>
-            <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {topics.map((t) => (
-                <div
-                  key={t.title}
-                  className="flex items-start gap-3 rounded-xl border border-line-warm p-4"
-                >
-                  <t.icon className="mt-0.5 size-4 text-flame" />
-                  <div>
-                    <p className="text-[12px] font-semibold text-ink">{t.title}</p>
-                    <p className="text-[11px] text-muted-warm">{t.desc}</p>
-                  </div>
-                </div>
-              ))}
             </CardContent>
           </Card>
 
