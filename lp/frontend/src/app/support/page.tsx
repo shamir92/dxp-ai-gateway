@@ -1,38 +1,30 @@
-import {
-  BookOpen,
-  CreditCard,
-  Key,
-  LifeBuoy,
-  MessageSquare,
-  Mail,
-  Users,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ArrowRight, Clock, Mail, MessageCircle, BookOpen, Key, CreditCard, LifeBuoy, Users } from "lucide-react";
+import { ButtonLink } from "@/components/button-link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { AppShell } from "@/components/app-shell";
-import { StatTile, TopSearchBar } from "@/components/token-plan-ui";
+import { TopSearchBar } from "@/components/token-plan-ui";
 import { RequireSession } from "@/components/require-session";
+
+const WA_NUMBER = "6285187963963";
+const WA_DISPLAY = "+62 851-8796-3963";
+const EMAIL = "hello@fromdxp.com";
 
 const channels = [
   {
-    icon: MessageSquare,
-    title: "Chat with support",
-    desc: "Talk to a specialist for technical and account questions.",
-    cta: "Start chat",
+    icon: MessageCircle,
+    title: "WhatsApp",
+    desc: "Fastest for integration, billing, and account questions.",
+    value: WA_DISPLAY,
+    href: `https://wa.me/${WA_NUMBER}`,
+    cta: "Chat on WhatsApp",
   },
   {
     icon: Mail,
-    title: "Email support",
-    desc: "Send a detailed request with logs and attachments.",
-    cta: "Create ticket",
-  },
-  {
-    icon: Users,
-    title: "Developer community",
-    desc: "Ask questions and share solutions with other builders.",
-    cta: "Join community",
+    title: "Email",
+    desc: "Send a detailed request with logs or screenshots attached.",
+    value: EMAIL,
+    href: `mailto:${EMAIL}`,
+    cta: "Send an email",
   },
 ];
 
@@ -44,69 +36,60 @@ const topics = [
   { icon: Users, title: "Account & security", desc: "Profile, login, and 2FA" },
 ];
 
-const tickets = [
-  ["Batch output delay", "In progress", "#48219 · Updated 2 days ago"],
-  ["Invoice correction", "Resolved", "#47802 · Updated 2 days ago"],
-  ["Plugin permission", "Resolved", "#47194 · Updated 2 days ago"],
-];
-
 export default function SupportPage() {
   return (
     <RequireSession>
       <AppShell
-        title="Support center"
-        subtitle="Get help with integration, billing, models, and account access."
-        actions={
-          <div className="flex items-center gap-3">
-            <TopSearchBar />
-            <Button variant="outline" className="rounded-full border-line-warm text-[12px]">
-              My tickets
-            </Button>
-          </div>
-        }
+        title="Support"
+        subtitle="Reach the DXP team about integration, billing, models, and account access."
+        actions={<TopSearchBar />}
       >
         <div className="mx-auto max-w-[1024px] space-y-8">
           <Card className="border-line-warm bg-white">
-            <CardContent className="flex flex-wrap items-center gap-4 py-5">
-              <span className="flex size-10 items-center justify-center rounded-full bg-success/10">
-                <span className="size-2.5 rounded-full bg-success" />
-              </span>
-              <div className="flex-1">
-                <p className="text-[14px] font-semibold text-ink">All services operational</p>
-                <p className="text-[12px] text-muted-warm">
-                  Gateway, batch processing, billing, and plugins are healthy.
-                </p>
+            <CardHeader>
+              <CardTitle className="text-[15px]">Contact us</CardTitle>
+              <p className="mt-1 text-[12px] text-muted-warm">
+                We answer on WhatsApp and email — usually within one business day.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-5 md:grid-cols-2">
+                {channels.map((c) => (
+                  <div
+                    key={c.title}
+                    className="flex flex-col rounded-2xl border border-line-warm bg-cream-card p-6"
+                  >
+                    <div className="flex size-11 items-center justify-center rounded-xl bg-white">
+                      <c.icon className="size-5 text-flame" />
+                    </div>
+                    <h3 className="mt-5 text-[16px] font-semibold text-ink">{c.title}</h3>
+                    <p className="mt-2 text-[12px] leading-relaxed text-muted-warm">
+                      {c.desc}
+                    </p>
+                    <p className="mt-4 font-mono text-[13px] text-ink">{c.value}</p>
+                    <ButtonLink
+                      href={c.href}
+                      className="mt-5 inline-flex h-10 w-fit items-center rounded-full bg-ink px-5 text-[12px] text-white hover:bg-ink/90"
+                    >
+                      {c.cta}
+                      <ArrowRight className="ml-1.5 size-3.5" />
+                    </ButtonLink>
+                  </div>
+                ))}
               </div>
-              <Button variant="ghost" className="text-[12px] text-flame">
-                View system status ↗
-              </Button>
+              <p className="mt-5 flex items-center gap-2 text-[11px] text-muted-warm">
+                <Clock className="size-3.5" />
+                Typical first response: under 4 hours on business days.
+              </p>
             </CardContent>
           </Card>
 
-          <div className="grid gap-4 md:grid-cols-3">
-            {channels.map((c) => (
-              <Card key={c.title} className="border-line-warm bg-white">
-                <CardContent className="flex h-full flex-col p-6">
-                  <c.icon className="size-5 text-flame" />
-                  <h3 className="mt-4 text-[14px] font-semibold text-ink">{c.title}</h3>
-                  <p className="mt-1.5 text-[12px] leading-relaxed text-muted-warm">{c.desc}</p>
-                  <Button className="mt-5 rounded-full bg-ink text-[12px] text-white hover:bg-ink/90">
-                    {c.cta}
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
           <Card className="border-line-warm bg-white">
             <CardHeader>
-              <CardTitle className="text-[15px]">Browse help topics</CardTitle>
-              <div className="mt-2 flex items-center gap-2 rounded-full border border-line-warm px-4">
-                <Input
-                  placeholder="Search help"
-                  className="h-10 border-0 bg-transparent p-0 text-[12px] shadow-none focus-visible:ring-0"
-                />
-              </div>
+              <CardTitle className="text-[15px]">What we can help with</CardTitle>
+              <p className="mt-1 text-[12px] text-muted-warm">
+                Mention the topic in your message so it reaches the right person.
+              </p>
             </CardHeader>
             <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {topics.map((t) => (
@@ -124,61 +107,17 @@ export default function SupportPage() {
             </CardContent>
           </Card>
 
-          <div className="grid gap-6 lg:grid-cols-2">
-            <Card className="border-line-warm bg-white">
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="text-[15px]">Recent tickets</CardTitle>
-                <Button variant="ghost" className="text-[12px] text-flame">
-                  View all
-                </Button>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {tickets.map(([title, status, meta]) => (
-                  <div
-                    key={title as string}
-                    className="flex items-center gap-3 rounded-xl border border-line-warm p-4"
-                  >
-                    <div className="flex-1">
-                      <p className="text-[12px] font-semibold text-ink">{title}</p>
-                      <p className="text-[11px] text-muted-warm">{meta}</p>
-                    </div>
-                    <Badge
-                      className={`rounded-full text-[10px] ${
-                        status === "Resolved"
-                          ? "bg-success/10 text-success"
-                          : "bg-flame/10 text-flame"
-                      }`}
-                    >
-                      {status}
-                    </Badge>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-
-            <Card className="border-line-warm bg-white">
-              <CardHeader>
-                <CardTitle className="text-[15px]">Your support plan</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-[18px] font-semibold text-ink">Developer support</p>
-                <p className="mt-1 text-[12px] text-muted-warm">
-                  Typical first response · under 4 hours
-                </p>
-                <ul className="mt-5 space-y-2.5 text-[12px] text-ink">
-                  <li>Technical integration support</li>
-                  <li>Billing and account assistance</li>
-                  <li>Ticket history and attachments</li>
-                </ul>
-                <Button variant="outline" className="mt-6 rounded-full border-line-warm text-[12px]">
-                  Compare support plans
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
+          <Card className="border-line-warm bg-white">
+            <CardContent className="py-5">
+              <p className="text-[12px] leading-relaxed text-muted-warm">
+                For the quickest answer, include your account email, the model or endpoint
+                involved, and what you expected to happen. Please do not send API keys —
+                we never need them to investigate.
+              </p>
+            </CardContent>
+          </Card>
         </div>
       </AppShell>
-
     </RequireSession>
   );
 }

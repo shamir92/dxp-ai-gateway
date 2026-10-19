@@ -6,7 +6,7 @@ import { ButtonLink } from "@/components/button-link";
 type NavItem = {
   label: string;
   href?: string;
-  children?: { label: string; href: string }[];
+  children?: { label: string; href: string; disabled?: boolean }[];
 };
 
 const navItems: NavItem[] = [
@@ -15,7 +15,9 @@ const navItems: NavItem[] = [
     label: "Pricing",
     children: [
       { label: "Token plans", href: "/pricing" },
-      { label: "API plan (beta)", href: "/api-plan" },
+      // Beta and not yet public: shows the entry without navigating, because the
+      // page itself is behind a session and would bounce visitors to /login.
+      { label: "API plan (beta)", href: "/api-plan", disabled: true },
     ],
   },
   { label: "Contact", href: "/contact" },
@@ -48,15 +50,25 @@ export function SiteHeader() {
                   </button>
                   <div className="invisible absolute left-1/2 top-full z-50 w-40 -translate-x-1/2 pt-2 opacity-0 transition-all group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100">
                     <div className="rounded-xl border border-line-warm bg-white py-2 shadow-lg">
-                      {item.children.map((child) => (
-                        <Link
-                          key={child.href}
-                          href={child.href}
-                          className="block px-4 py-2 text-[12px] text-muted-warm transition-colors hover:bg-cream-card hover:text-ink"
-                        >
-                          {child.label}
-                        </Link>
-                      ))}
+                      {item.children.map((child) =>
+                        child.disabled ? (
+                          <span
+                            key={child.href}
+                            aria-disabled="true"
+                            className="block cursor-not-allowed px-4 py-2 text-[12px] text-muted-warm/60 select-none"
+                          >
+                            {child.label}
+                          </span>
+                        ) : (
+                          <Link
+                            key={child.href}
+                            href={child.href}
+                            className="block px-4 py-2 text-[12px] text-muted-warm transition-colors hover:bg-cream-card hover:text-ink"
+                          >
+                            {child.label}
+                          </Link>
+                        ),
+                      )}
                     </div>
                   </div>
                 </div>
