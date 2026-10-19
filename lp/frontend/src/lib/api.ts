@@ -11,6 +11,16 @@ export async function apiFetch(path: string, init: RequestInit = {}) {
   return res;
 }
 
+export class ApiError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 export async function apiJSON<T>(path: string, init: RequestInit = {}): Promise<T> {
   const res = await apiFetch(path, init);
   const body = await res.json().catch(() => null);
@@ -19,7 +29,7 @@ export async function apiJSON<T>(path: string, init: RequestInit = {}): Promise<
       body && typeof body === "object" && "error" in body
         ? (body as { error?: { message?: string } }).error?.message
         : undefined;
-    throw new Error(message ?? `Request failed (${res.status})`);
+    throw new ApiError(message ?? `Request failed (${res.status})`, res.status);
   }
   return body as T;
 }

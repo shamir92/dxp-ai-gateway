@@ -1,5 +1,6 @@
 import { TokenPlanDashboard } from "@/components/token-plan-dashboard";
 
+// Token plan, total-consumption view.
 export default function ConsumptionPage() {
-  return <TokenPlanDashboard initialView="total" />;
+  return <TokenPlanDashboard site="tpai" />;
 }

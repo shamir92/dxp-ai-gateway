@@ -1,60 +1,154 @@
 "use client";
 
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import {
   ApiKeyCard,
   PlanBenefitsCard,
   PlanMetaStrip,
   PlanUsageCard,
+  TokenPricingCard,
   TopSearchBar,
-  UsageBarChart,
-  UsageLegend,
 } from "@/components/token-plan-ui";
+import { ApiError } from "@/lib/api";
+import {
+  createKey,
+  deleteKey,
+  fetchEndpoints,
+  fetchKeys,
+  fetchSubscription,
+  formatCredits,
+  type ApiKey,
+  type Endpoint,
+  type Site,
+  type SubscriptionView,
+} from "@/lib/api-keys";
 
-const dayLabels = [
-  "Oct 01",
-  "Oct 02",
-  "Oct 03",
-  "Oct 04",
-  "Oct 05",
-  "Oct 06",
-  "Oct 07",
-  "Oct 08",
-  "Oct 09",
-  "Oct 10",
-];
+// A user who registered before provisioning existed has no external account yet.
+// The backend enqueues the missing rows on this first request and the worker
+// provisions within a few seconds, so we retry briefly instead of erroring.
+const PROVISIONING_RETRY_DELAY_MS = 3000;
+const PROVISIONING_MAX_ATTEMPTS = 6;
 
-const totalSeries = [
-  { name: "mimo-v2.6-flash", color: "#FF5A2A", values: [420, 510, 480, 620, 590, 700, 650, 720, 680, 740] },
-  { name: "mimo-v2.6-pro", color: "#FF9B86", values: [180, 220, 200, 260, 240, 300, 280, 310, 290, 320] },
-  { name: "deepseek-v4.1-flash", color: "#141F32", values: [90, 110, 100, 130, 120, 150, 140, 160, 150, 170] },
-  { name: "glm-5.3-flash", color: "#6D6962", values: [40, 50, 45, 60, 55, 70, 65, 75, 70, 80] },
-];
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const singleSeries = [
-  { name: "Total", color: "#FF5A2A", values: [120, 180, 150, 220, 200, 260, 240, 280, 250, 300] },
-  { name: "Cache hit", color: "#38A169", values: [70, 100, 90, 130, 110, 150, 140, 160, 145, 170] },
-  { name: "Input", color: "#FF9B86", values: [30, 50, 40, 60, 55, 70, 65, 75, 70, 80] },
-  { name: "Output", color: "#141F32", values: [20, 30, 20, 30, 35, 40, 35, 45, 35, 50] },
-];
+export function TokenPlanDashboard({ site }: { site: Site }) {
+  const router = useRouter();
+  const [subscription, setSubscription] = useState<SubscriptionView | null>(null);
+  const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
+  const [keys, setKeys] = useState<ApiKey[]>([]);
+  const [createdKey, setCreatedKey] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [keyError, setKeyError] = useState<string | null>(null);
 
-export function TokenPlanDashboard({
-  initialView,
-}: {
-  initialView: "single" | "total";
-}) {
-  const [view, setView] = useState(initialView);
+  const handleError = useCallback(
+    (err: unknown) => {
+      if (err instanceof ApiError && err.status === 401) {
+        router.replace("/login");
+        return;
+      }
+      setKeyError(err instanceof Error ? err.message : "Request failed");
+    },
+    [router],
+  );
+
+  const load = useCallback(
+    async (target: Site) => {
+      // State is only touched after the first await, so the effect body never
+      // performs a synchronous update.
+      for (let attempt = 0; ; attempt++) {
+        // Endpoints come from the platform's public status, so they load
+        // independently of the authenticated calls.
+        const [subscriptionResult, keysResult, endpointsResult] = await Promise.allSettled([
+          fetchSubscription(target),
+          fetchKeys(target),
+          fetchEndpoints(target),
+        ]);
+
+        if (endpointsResult.status === "fulfilled") {
+          setEndpoints(endpointsResult.value.items ?? []);
+        } else {
+          setEndpoints([]);
+        }
+
+        if (subscriptionResult.status === "fulfilled") {
+          setSubscription(subscriptionResult.value);
+        } else {
+          setSubscription(null);
+        }
+        if (keysResult.status === "fulfilled") {
+          setKeys(keysResult.value.items);
+        } else {
+          setKeys([]);
+        }
+
+        const failure =
+          subscriptionResult.status === "rejected"
+            ? subscriptionResult.reason
+            : keysResult.status === "rejected"
+              ? keysResult.reason
+              : null;
+
+        if (!failure) {
+          setKeyError(null);
+          setLoading(false);
+          return;
+        }
+
+        // 409 means the platform account is still being created for this user.
+        if (
+          failure instanceof ApiError &&
+          failure.status === 409 &&
+          attempt < PROVISIONING_MAX_ATTEMPTS
+        ) {
+          setKeyError("Setting up your account on this platform…");
+          await sleep(PROVISIONING_RETRY_DELAY_MS);
+          continue;
+        }
+
+        handleError(failure);
+        setLoading(false);
+        return;
+      }
+    },
+    [handleError],
+  );
+
+  useEffect(() => {
+    void load(site);
+  }, [site, load]);
+
+  const handleCreate = async (name: string) => {
+    try {
+      // Unlimited quota and no expiry, matching the platform's default form.
+      const created = await createKey(site, {
+        name,
+        unlimited_quota: true,
+        expired_time: -1,
+      });
+      setCreatedKey(created.key);
+      const page = await fetchKeys(site);
+      setKeys(page.items);
+    } catch (err) {
+      handleError(err);
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    try {
+      await deleteKey(site, id);
+      setKeys((prev) => prev.filter((key) => key.id !== id));
+    } catch (err) {
+      handleError(err);
+    }
+  };
+
+  const creditsLabel = subscription
+    ? subscription.unlimited
+      ? "Unlimited credits"
+      : `${formatCredits(subscription.credits_total ?? 0)} credits`
+    : "—";
 
   return (
     <AppShell
@@ -63,121 +157,27 @@ export function TokenPlanDashboard({
       actions={<TopSearchBar />}
     >
       <div className="mx-auto max-w-[1204px] space-y-6">
-        <PlanMetaStrip />
-        <PlanUsageCard />
+        <PlanMetaStrip view={subscription} />
+        <PlanUsageCard view={subscription} loading={loading} />
 
         <div className="grid gap-6 lg:grid-cols-2">
-          <ApiKeyCard />
-          <PlanBenefitsCard />
+          <ApiKeyCard
+            keys={keys}
+            loading={loading}
+            error={keyError}
+            createdKey={createdKey}
+            onCreate={handleCreate}
+            onDelete={handleDelete}
+            onDismissCreated={() => setCreatedKey(null)}
+            endpoints={endpoints}
+          />
+          <PlanBenefitsCard credits={creditsLabel} />
         </div>
 
-        <Card className="border-line-warm bg-white">
-          <CardHeader className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <CardTitle className="text-[15px]">Usage details</CardTitle>
-              <p className="mt-1 text-[11px] text-muted-warm">
-                All timestamps are displayed in UTC. Data updates in near-real time (≤5 min
-                delay).
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Select defaultValue="2026-10">
-                <SelectTrigger className="w-[120px] rounded-full text-[12px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="2026-10">Month 2026-10</SelectItem>
-                  <SelectItem value="2026-09">Month 2026-09</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select defaultValue="all">
-                <SelectTrigger className="w-[130px] rounded-full text-[12px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All models</SelectItem>
-                  <SelectItem value="mimo-v2.6-flash">mimo-v2.6-flash</SelectItem>
-                  <SelectItem value="mimo-v2.6-pro">mimo-v2.6-pro</SelectItem>
-                  <SelectItem value="deepseek-v4.1-flash">deepseek-v4.1-flash</SelectItem>
-                  <SelectItem value="glm-5.3-flash">glm-5.3-flash</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button variant="outline" className="rounded-full border-line-warm text-[12px]">
-                Export
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-[12px] text-muted-warm">
-                {view === "single"
-                  ? "mimo-v2.6-flash · 8.4B tokens · Oct 01–30"
-                  : "Total token consumption · 178,381,464 tokens · Oct 01–30"}
-              </p>
-              <Tabs value={view} onValueChange={setView}>
-              <TabsList className="h-auto flex-wrap rounded-2xl bg-cream p-1">
-                  <TabsTrigger value="single" className="rounded-full text-[10px] sm:text-[11px]">
-                    Single model token consumption
-                  </TabsTrigger>
-                  <TabsTrigger value="total" className="rounded-full text-[10px] sm:text-[11px]">
-                    Total token consumption
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-            </div>
+        <TokenPricingCard />
 
-            {view === "single" ? (
-              <>
-                <div className="mt-4 flex flex-wrap items-center gap-3">
-                  <span className="text-[10px] font-medium text-muted-warm">
-                    SELECTED MODEL
-                  </span>
-                  <span className="rounded-full bg-cream px-3 py-1 font-mono text-[12px] text-ink">
-                    mimo-v2.6-flash
-                  </span>
-                </div>
-                <UsageLegend
-                  items={[
-                    { name: "Total tokens", value: "8.4B", share: "100%", color: "#FF5A2A" },
-                    { name: "Cache hit", value: "4.7B", share: "56%", color: "#38A169" },
-                    { name: "Input", value: "2.4B", share: "29%", color: "#FF9B86" },
-                    { name: "Output", value: "1.3B", share: "15%", color: "#141F32" },
-                  ]}
-                />
-                <UsageBarChart series={singleSeries} labels={dayLabels} max={350} />
-              </>
-            ) : (
-              <>
-                <UsageLegend
-                  items={[
-                    { name: "mimo-v2.6-flash", value: "8.4B", share: "47%", color: "#FF5A2A" },
-                    { name: "mimo-v2.6-pro", value: "5.1B", share: "29%", color: "#FF9B86" },
-                    { name: "deepseek-v4.1-flash", value: "2.8B", share: "16%", color: "#141F32" },
-                    { name: "glm-5.3-flash", value: "1.5B", share: "8%", color: "#6D6962" },
-                  ]}
-                />
-                <UsageBarChart series={totalSeries} labels={dayLabels} max={800} />
-                <div className="mt-8">
-                  <p className="text-[12px] text-muted-warm">
-                    Number of requests · 1,774 requests · 30-day period
-                  </p>
-                  <div className="mt-3 grid grid-cols-3 gap-3">
-                    {[
-                      ["mimo-v2.6-flash", "1,024"],
-                      ["mimo-v2.6-pro", "612"],
-                      ["Other", "138"],
-                    ].map(([k, v]) => (
-                      <div key={k} className="rounded-xl border border-line-warm p-3">
-                        <p className="text-[11px] text-muted-warm">{k}</p>
-                        <p className="mt-1 text-[16px] font-semibold text-ink">{v}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
+        {/* Usage details is hidden for now: the chart, filters and tabs are demo data.
+            Re-enable once a usage-analytics endpoint exists (see the design spec). */}
       </div>
     </AppShell>
   );
