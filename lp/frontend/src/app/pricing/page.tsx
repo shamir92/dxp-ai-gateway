@@ -57,6 +57,10 @@ const quickStart = [
 ];
 
 const flagship: Plan["features"] = [
+  {
+    title: "All 10 Flagship Models",
+    sub: "DeepSeek V4.1/V4 · MiMo V2.6 · GLM 5.3 · Kimi K3 · MiniMax M3",
+  },
   { title: "V2.6 Flagship Model Access", sub: "Text / Multimodal / Speech" },
   { title: "Coding Framework Support", sub: "OpenClaw / Codex / MiMo Claw etc." },
   { title: "Free TTS Models", sub: "Limited time offer" },
@@ -68,7 +72,7 @@ const tokenPlans: Plan[] = [
   {
     name: "Lite",
     blurb: "Light use.",
-    price: "$5.28",
+    price: "$5.46",
     period: "/ month",
     oldPrice: "$6",
     features: [
@@ -81,7 +85,7 @@ const tokenPlans: Plan[] = [
   {
     name: "Standard",
     blurb: "Daily work.",
-    price: "$14.08",
+    price: "$14.56",
     period: "/ month",
     oldPrice: "$16",
     features: [
@@ -90,12 +94,11 @@ const tokenPlans: Plan[] = [
     ],
     cta: "Subscribe",
     href: "/register",
-    popular: true,
   },
   {
     name: "Pro",
     blurb: "Pro development.",
-    price: "$44",
+    price: "$45.50",
     period: "/ month",
     oldPrice: "$50",
     features: [
@@ -104,11 +107,12 @@ const tokenPlans: Plan[] = [
     ],
     cta: "Subscribe",
     href: "/register",
+    popular: true,
   },
   {
     name: "Max",
     blurb: "Power development.",
-    price: "$88",
+    price: "$91",
     period: "/ month",
     oldPrice: "$100",
     features: [
@@ -190,7 +194,7 @@ export default function PricingPage() {
           </div>
           <div className="mt-8">
             <ButtonLink
-              href="/api-pricing"
+              href="/api-plan"
               variant="outline"
               className="h-11 rounded-full border-line-warm bg-white px-6 text-[13px] text-ink"
             >

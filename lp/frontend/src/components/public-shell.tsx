@@ -15,7 +15,7 @@ const navItems: NavItem[] = [
     label: "Pricing",
     children: [
       { label: "Token plans", href: "/pricing" },
-      { label: "API pricing", href: "/api-pricing" },
+      { label: "API plan (beta)", href: "/api-plan" },
     ],
   },
   { label: "Contact", href: "/contact" },

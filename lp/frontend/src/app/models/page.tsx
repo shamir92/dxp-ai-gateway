@@ -2,6 +2,18 @@ import { PublicShell } from "@/components/public-shell";
 
 const models = [
   {
+    id: "deepseek-v4.1-flash-fast",
+    vendor: "DeepSeek",
+    tag: "Fastest",
+    desc: "Fastest reasoning tier for high-throughput agents.",
+  },
+  {
+    id: "deepseek-v4-flash-fast",
+    vendor: "DeepSeek",
+    tag: "Fastest",
+    desc: "Fastest low-latency tier for real-time routing.",
+  },
+  {
     id: "deepseek-v4.1-flash",
     vendor: "DeepSeek",
     tag: "Reasoning",
@@ -63,7 +75,7 @@ export default function ModelsPage() {
             Models on the gateway.
           </h1>
           <p className="mt-3 max-w-[560px] text-[14px] text-muted-warm">
-            One API key, eight production models — and more added regularly.
+            One API key, ten production models — and more added regularly.
           </p>
           <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {models.map((m) => (

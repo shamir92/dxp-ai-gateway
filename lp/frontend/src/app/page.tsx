@@ -1,34 +1,24 @@
 import Link from "next/link";
 import {
   ArrowRight,
-  Check,
-  Gauge,
   Key,
-  Monitor,
   Play,
-  Route,
-  ShieldCheck,
-  SlidersHorizontal,
-  Terminal,
-  Wallet,
-  Workflow,
-  Wrench,
-  Zap,
 } from "lucide-react";
 import { PublicShell } from "@/components/public-shell";
-import { Button } from "@/components/ui/button";
 import { ButtonLink } from "@/components/button-link";
 import { Badge } from "@/components/ui/badge";
 import { ApiPlayground } from "@/components/api-playground";
 
 const metrics = [
   { value: "OpenAI", label: "compatible API" },
-  { value: "8+", label: "models and growing" },
+  { value: "10+", label: "models and growing" },
   { value: "Streaming", label: "tools and batch jobs" },
   { value: "Analytics", label: "usage and spend tracking" },
 ];
 
 const models = [
+  { id: "deepseek-v4.1-flash-fast", vendor: "DeepSeek", note: "Fastest reasoning tier" },
+  { id: "deepseek-v4-flash-fast", vendor: "DeepSeek", note: "Fastest low-latency tier" },
   { id: "deepseek-v4.1-flash", vendor: "DeepSeek", note: "Fast, efficient reasoning" },
   { id: "deepseek-v4-flash", vendor: "DeepSeek", note: "Low-latency chat and extraction" },
   { id: "mimo-v2.6-pro", vendor: "MiMo", note: "Deep analysis and agent planning" },
@@ -45,69 +35,38 @@ const benefits = [
   "Regional endpoints and batch processing",
 ];
 
-const capabilities = [
-  {
-    icon: Route,
-    title: "Smart routing",
-    desc: "Match each request to the right model for quality, latency, and cost.",
-  },
-  {
-    icon: Zap,
-    title: "Streaming & tools",
-    desc: "SSE streaming, function calling, and structured JSON output built in.",
-  },
-  {
-    icon: Gauge,
-    title: "Rate limits & quotas",
-    desc: "Per-key RPS, budgets, and concurrency controls for every environment.",
-  },
-  {
-    icon: SlidersHorizontal,
-    title: "Usage intelligence",
-    desc: "Tokens, requests, cache efficiency, and spend by model and key.",
-  },
-  {
-    icon: Wallet,
-    title: "Credits & billing",
-    desc: "Metered API billing and credit packs for tools — clear cost per call.",
-  },
-  {
-    icon: ShieldCheck,
-    title: "Secure by default",
-    desc: "Scoped API keys, rotation, audit trails, and regional endpoints.",
-  },
-  {
-    icon: Workflow,
-    title: "Batch operations",
-    desc: "High-volume async workloads with status, retries, and priority queues.",
-  },
-  {
-    icon: Wrench,
-    title: "Fallback & reliability",
-    desc: "Retries, timeouts, and healthy fallback paths to keep products online.",
-  },
-];
-
+// Icons are self-hosted under /tools so the page makes no third-party requests
+// (CSP-safe). Brand marks remain the property of their owners and are used only
+// to identify the tools the gateway is compatible with.
 const officialTools = [
   {
     name: "Claude Code",
     desc: "CLI and extension — point Anthropic-compatible settings at DXP.",
+    icon: "/tools/claude-code.png",
   },
   {
     name: "Codex",
     desc: "Coding agent — set Base URL and your key, then keep working.",
+    icon: "/tools/codex.png",
   },
   {
     name: "OpenClaw",
     desc: "Coding agent and gateway with full tool-calling support.",
+    icon: "/tools/openclaw.png",
   },
   {
     name: "Hermes",
     desc: "Add a custom provider in a few steps.",
+    icon: "/tools/hermes.png",
   },
 ];
 
-const supportedEditors = ["VS Code", "Cursor", "Antigravity", "Claude Desktop"];
+const supportedEditors = [
+  { name: "VS Code", icon: "/tools/vscode.png" },
+  { name: "Cursor", icon: "/tools/cursor.png" },
+  { name: "Antigravity", icon: "/tools/antigravity.png" },
+  { name: "Claude Desktop", icon: "/tools/claude-desktop.png" },
+];
 
 const codeSample = `from openai import OpenAI
 
@@ -277,34 +236,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Capabilities */}
-      <section className="bg-white px-14 py-20">
-        <div className="mx-auto max-w-[1302px]">
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-flame">
-                Platform capabilities
-              </p>
-              <h2 className="mt-3 font-heading text-[36px] font-semibold text-ink">
-                From first request to production scale.
-              </h2>
-            </div>
-            <p className="text-[12px] text-muted-warm">Everything managed in one console.</p>
-          </div>
-          <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {capabilities.map((c) => (
-              <div key={c.title} className="flex min-h-[190px] flex-col rounded-2xl bg-cream-card p-6">
-                <div className="flex size-10 items-center justify-center rounded-xl bg-white">
-                  <c.icon className="size-4 text-flame" />
-                </div>
-                <h3 className="mt-5 text-[15px] font-semibold text-ink">{c.title}</h3>
-                <p className="mt-2 text-[12px] leading-relaxed text-muted-warm">{c.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* Compatibility */}
       <section className="bg-cream-deep px-14 py-20">
         <div className="mx-auto max-w-[1302px]">
@@ -331,7 +262,14 @@ export default function LandingPage() {
                     className="rounded-2xl border border-line-warm bg-white p-6"
                   >
                     <div className="flex size-10 items-center justify-center rounded-xl bg-cream">
-                      <Terminal className="size-4 text-flame" />
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={tool.icon}
+                        alt=""
+                        width={22}
+                        height={22}
+                        className="size-[22px] object-contain"
+                      />
                     </div>
                     <h3 className="mt-4 text-[16px] font-semibold text-ink">{tool.name}</h3>
                     <p className="mt-2 text-[12px] leading-relaxed text-muted-warm">{tool.desc}</p>
@@ -347,13 +285,20 @@ export default function LandingPage() {
               <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
                 {supportedEditors.map((editor) => (
                   <div
-                    key={editor}
+                    key={editor.name}
                     className="flex items-center gap-3 rounded-2xl border border-line-warm bg-white px-5 py-4"
                   >
                     <span className="flex size-9 items-center justify-center rounded-full bg-cream">
-                      <Monitor className="size-4 text-flame" />
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={editor.icon}
+                        alt=""
+                        width={20}
+                        height={20}
+                        className="size-5 object-contain"
+                      />
                     </span>
-                    <span className="text-[14px] font-medium text-ink">{editor}</span>
+                    <span className="text-[14px] font-medium text-ink">{editor.name}</span>
                   </div>
                 ))}
               </div>

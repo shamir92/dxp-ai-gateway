@@ -41,6 +41,8 @@ const languageModels = [
 ];
 
 const otherModels = [
+  { id: "deepseek-v4.1-flash-fast", vendor: "DeepSeek" },
+  { id: "deepseek-v4-flash-fast", vendor: "DeepSeek" },
   { id: "deepseek-v4.1-flash", vendor: "DeepSeek" },
   { id: "deepseek-v4-flash", vendor: "DeepSeek" },
   { id: "glm-5.3-flash", vendor: "GLM" },

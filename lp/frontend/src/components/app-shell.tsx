@@ -11,14 +11,15 @@ const sections = [
     label: "WORKSPACE",
     items: [
       { label: "Token plan", href: "/token-plan" },
-      { label: "API lifecycle", href: "/api-lifecycle" },
-      { label: "Plugins", href: "/plugins" },
+      { label: "API plan", href: "/api-plan" },
+      // Hidden until implemented: the Plugins page and /plugins route still exist.
     ],
   },
   {
     label: "RESOURCES",
     items: [
-      { label: "Documentation", href: "/documentation" },
+      // Hidden until implemented: the Documentation page and /documentation route
+      // still exist.
       { label: "Support", href: "/support" },
     ],
   },
