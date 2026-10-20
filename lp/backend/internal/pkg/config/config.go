@@ -48,7 +48,7 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("SESSION_TTL_DAYS: %w", err)
 	}
 	cfg := &Config{
-		HTTPAddr:           getenv("HTTP_ADDR", ":8080"),
+		HTTPAddr:           httpAddr(),
 		DatabaseURL:        os.Getenv("DATABASE_URL"),
 		SessionCookieName:  getenv("SESSION_COOKIE_NAME", "dxp_session"),
 		SessionTTLDays:     ttl,
@@ -101,6 +101,15 @@ func getenv(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// httpAddr prefers the platform-assigned PORT (Vercel) and falls back to
+// HTTP_ADDR, then the local default.
+func httpAddr() string {
+	if p := strings.TrimSpace(os.Getenv("PORT")); p != "" {
+		return ":" + p
+	}
+	return getenv("HTTP_ADDR", ":8080")
 }
 
 // LoadDotEnv reads KEY=VALUE lines into the process environment if the key

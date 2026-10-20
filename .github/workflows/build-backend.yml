@@ -1,18 +1,19 @@
-name: build backend image
+name: build images
 
-# Publishes the backend container image to GHCR. A separate GitOps repository
-# consumes the immutable sha tag from here.
+# Publishes the backend and worker container images to GHCR. A separate GitOps
+# repository consumes the immutable sha tags from here.
 on:
   push:
     branches: [master]
     paths:
       - "lp/backend/**"
+      - "lp/worker/**"
       - ".github/workflows/build-backend.yml"
   workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository_owner }}/dxp-ai-gateway/backend
+  IMAGE_PREFIX: ${{ github.repository_owner }}/dxp-ai-gateway
 
 jobs:
   build:
@@ -20,6 +21,18 @@ jobs:
     permissions:
       contents: read
       packages: write
+    strategy:
+      # The two images are independent; don't cancel one because the other failed.
+      fail-fast: false
+      matrix:
+        include:
+          - image: backend
+            context: lp/backend
+            file: lp/backend/Dockerfile
+          # The worker module replaces ../backend, so its build context is lp/.
+          - image: worker
+            context: lp/worker
+            file: lp/worker/Dockerfile
 
     steps:
       - name: Check out
@@ -39,7 +52,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.image }}
           tags: |
             type=sha,format=long,prefix=
             type=ref,event=branch
@@ -48,12 +61,12 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: lp/backend
-          file: lp/backend/Dockerfile
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
           platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
           provenance: false

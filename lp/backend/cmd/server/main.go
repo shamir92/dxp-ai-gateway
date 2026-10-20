@@ -8,14 +8,13 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
-	"github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/dxpglobal/ai-gateway/backend/internal/controller"
@@ -23,13 +22,13 @@ import (
 	"github.com/dxpglobal/ai-gateway/backend/internal/integration/credentials"
 	"github.com/dxpglobal/ai-gateway/backend/internal/integration/newapi"
 	"github.com/dxpglobal/ai-gateway/backend/internal/middleware"
+	"github.com/dxpglobal/ai-gateway/backend/internal/migrations"
 	"github.com/dxpglobal/ai-gateway/backend/internal/pkg/config"
 	"github.com/dxpglobal/ai-gateway/backend/internal/pkg/geoip"
 	"github.com/dxpglobal/ai-gateway/backend/internal/pkg/mail"
 	"github.com/dxpglobal/ai-gateway/backend/internal/pkg/oauth"
 	"github.com/dxpglobal/ai-gateway/backend/internal/repository/postgres"
 	"github.com/dxpglobal/ai-gateway/backend/internal/usecase"
-	"github.com/dxpglobal/ai-gateway/backend/internal/worker"
 )
 
 func main() {
@@ -57,18 +56,9 @@ func main() {
 	}
 	defer pool.Close()
 
-	tmplDir := os.Getenv("MAIL_TEMPLATES_DIR")
-	if tmplDir == "" {
-		tmplDir = "internal/pkg/mail/templates"
-	}
-	tmpl, err := mail.LoadTemplates(tmplDir)
+	tmpl, err := mail.LoadTemplates()
 	if err != nil {
-		// fall back relative to executable cwd
-		alt := filepath.Join("lp", "backend", "internal", "pkg", "mail", "templates")
-		tmpl, err = mail.LoadTemplates(alt)
-		if err != nil {
-			log.Fatalf("mail templates: %v", err)
-		}
+		log.Fatalf("mail templates: %v", err)
 	}
 
 	var mailer mail.Mailer
@@ -185,16 +175,8 @@ func main() {
 		}
 	}
 
-	externalWorker, err := worker.NewExternalSiteAccountWorker(externalAccounts, credentialCipher, map[entity.ExternalSite]worker.UserCreator{
-		entity.ExternalSiteTPAI: tpaiClient,
-		entity.ExternalSiteAPAI: apaiClient,
-	})
-	if err != nil {
-		log.Fatalf("external account worker: %v", err)
-	}
-
+	// External account provisioning runs in cmd/worker, deployed separately.
 	appCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	workerDone := externalWorker.Start(appCtx)
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
@@ -220,18 +202,17 @@ func main() {
 		cancel()
 	}
 	stop()
-	<-workerDone
 }
 
 func runMigrations(databaseURL string) error {
 	if os.Getenv("SKIP_MIGRATE") == "1" {
 		return nil
 	}
-	src, err := (&file.File{}).Open("file://migrations")
+	src, err := iofs.New(migrations.FS, ".")
 	if err != nil {
 		return fmt.Errorf("open migrations: %w", err)
 	}
-	m, err := migrate.NewWithSourceInstance("file", src, databaseURL)
+	m, err := migrate.NewWithSourceInstance("iofs", src, databaseURL)
 	if err != nil {
 		return fmt.Errorf("migrate init: %w", err)
 	}
