@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/getsentry/sentry-go"
 )
 
 const (
@@ -121,6 +123,18 @@ type requestOptions struct {
 // do performs one JSON request and returns the raw `data` field. It never logs or
 // returns the request body, so credentials/keys cannot leak through it.
 func (c *Client) do(ctx context.Context, opts requestOptions) (json.RawMessage, error) {
+	// Span around the outbound call: this is the dependency that actually fails
+	// (timeouts, 429s, upstream 5xx), so it belongs in the trace. When Sentry is
+	// disabled or the request was not sampled this is effectively a no-op.
+	span := sentry.StartSpan(ctx, "http.client",
+		sentry.WithDescription(opts.method+" "+opts.path),
+		sentry.WithTransactionName(opts.method+" "+opts.path),
+	)
+	defer span.Finish()
+	span.SetData("http.request.method", opts.method)
+	span.SetData("url.path", opts.path)
+	span.SetData("server.address", c.baseURL)
+
 	var reader io.Reader
 	if opts.body != nil {
 		payload, err := json.Marshal(opts.body)
@@ -130,7 +144,7 @@ func (c *Client) do(ctx context.Context, opts requestOptions) (json.RawMessage, 
 		defer clear(payload)
 		reader = bytes.NewReader(payload)
 	}
-	req, err := http.NewRequestWithContext(ctx, opts.method, c.baseURL+opts.path, reader)
+	req, err := http.NewRequestWithContext(span.Context(), opts.method, c.baseURL+opts.path, reader)
 	if err != nil {
 		return nil, fmt.Errorf("create external request")
 	}
@@ -157,6 +171,8 @@ func (c *Client) do(ctx context.Context, opts requestOptions) (json.RawMessage, 
 		return nil, fmt.Errorf("external request failed")
 	}
 	defer resp.Body.Close()
+	span.SetData("http.response.status_code", resp.StatusCode)
+	span.Status = sentry.HTTPtoSpanStatus(resp.StatusCode)
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxDrainBytes))
 	if err != nil {
 		return nil, fmt.Errorf("read external response")

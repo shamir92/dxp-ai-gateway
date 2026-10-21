@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	sentrygin "github.com/getsentry/sentry-go/gin"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -25,8 +26,10 @@ import (
 	"github.com/dxpglobal/ai-gateway/backend/internal/migrations"
 	"github.com/dxpglobal/ai-gateway/backend/internal/pkg/config"
 	"github.com/dxpglobal/ai-gateway/backend/internal/pkg/geoip"
+	"github.com/dxpglobal/ai-gateway/backend/internal/pkg/logging"
 	"github.com/dxpglobal/ai-gateway/backend/internal/pkg/mail"
 	"github.com/dxpglobal/ai-gateway/backend/internal/pkg/oauth"
+	"github.com/dxpglobal/ai-gateway/backend/internal/pkg/observability"
 	"github.com/dxpglobal/ai-gateway/backend/internal/repository/postgres"
 	"github.com/dxpglobal/ai-gateway/backend/internal/usecase"
 )
@@ -35,30 +38,34 @@ func main() {
 	// Load lp/backend/.env before config (process env wins over file).
 	if err := config.LoadDotEnv(".env"); err != nil {
 		if !os.IsNotExist(err) {
-			log.Printf("dotenv: %v", err)
+			slog.Warn("dotenv load failed", slog.Any("error", err))
 		} else if err := config.LoadDotEnv("lp/backend/.env"); err != nil && !os.IsNotExist(err) {
-			log.Printf("dotenv: %v", err)
+			slog.Warn("dotenv load failed", slog.Any("error", err))
 		}
 	}
 
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("config: %v", err)
+		fatal("config", err)
 	}
 
+	// Install structured logging once configuration (and therefore LOG_LEVEL
+	// from .env) is known.
+	logging.Setup()
+
 	if err := runMigrations(cfg.DatabaseURL); err != nil {
-		log.Fatalf("migrate: %v", err)
+		fatal("migrate", err)
 	}
 
 	pool, err := pgxpool.New(context.Background(), cfg.DatabaseURL)
 	if err != nil {
-		log.Fatalf("db: %v", err)
+		fatal("db", err)
 	}
 	defer pool.Close()
 
 	tmpl, err := mail.LoadTemplates()
 	if err != nil {
-		log.Fatalf("mail templates: %v", err)
+		fatal("mail templates", err)
 	}
 
 	var mailer mail.Mailer
@@ -86,19 +93,19 @@ func main() {
 
 	credentialCipher, err := credentials.NewCipher(cfg.ExternalPasswordEncryptionKey)
 	if err != nil {
-		log.Fatalf("external credentials: %v", err)
+		fatal("external credentials", err)
 	}
 	accountFactory, err := credentials.NewAccountFactory(credentialCipher, []entity.ExternalSite{entity.ExternalSiteTPAI, entity.ExternalSiteAPAI})
 	if err != nil {
-		log.Fatalf("external accounts: %v", err)
+		fatal("external accounts", err)
 	}
 	tpaiClient, err := newapi.NewClient(cfg.TPAI.BaseURL, cfg.TPAI.AdminToken, 10*time.Second)
 	if err != nil {
-		log.Fatalf("TPAI client: %v", err)
+		fatal("TPAI client", err)
 	}
 	apaiClient, err := newapi.NewClient(cfg.APAI.BaseURL, cfg.APAI.AdminToken, 10*time.Second)
 	if err != nil {
-		log.Fatalf("APAI client: %v", err)
+		fatal("APAI client", err)
 	}
 
 	authUC := usecase.NewAuthUsecase(
@@ -129,7 +136,23 @@ func main() {
 	settingsH := controller.NewSettingsController(settingsUC)
 	apiKeysH := controller.NewAPIKeyController(apiKeyUC)
 
-	r := gin.Default()
+	// Sentry is optional: without SENTRY_DSN this is a no-op.
+	observability.Init()
+	defer observability.Flush()
+
+	// gin.New rather than gin.Default: the middleware chain is explicit, and
+	// request logging is ours (structured, correlated) instead of gin's.
+	r := gin.New()
+	r.Use(
+		gin.Recovery(),
+		middleware.RequestID(),
+		sentrygin.New(sentrygin.Options{
+			// Repanic so gin.Recovery writes the response; sentrygin captures
+			// the event on the way past.
+			Repanic: true,
+		}),
+		middleware.RequestLogger(),
+	)
 	r.GET("/healthz", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"ok": true, "time": time.Now().UTC()})
 	})
@@ -185,19 +208,19 @@ func main() {
 	}
 	serverErrors := make(chan error, 1)
 	go func() {
-		log.Printf("listening on %s", cfg.HTTPAddr)
+		slog.Info("listening", slog.String("addr", cfg.HTTPAddr))
 		serverErrors <- server.ListenAndServe()
 	}()
 
 	select {
 	case err := <-serverErrors:
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Printf("server: %v", err)
+			slog.Error("server stopped", slog.Any("error", err))
 		}
 	case <-appCtx.Done():
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		if err := server.Shutdown(shutdownCtx); err != nil {
-			log.Printf("server shutdown: %v", err)
+			slog.Error("server shutdown failed", slog.Any("error", err))
 		}
 		cancel()
 	}
@@ -221,4 +244,11 @@ func runMigrations(databaseURL string) error {
 		return err
 	}
 	return nil
+}
+
+// fatal reports a startup failure as structured JSON and exits non-zero, so a
+// container platform sees the failure instead of a running-but-unusable server.
+func fatal(what string, err error) {
+	slog.Error("startup failed", slog.String("stage", what), slog.Any("error", err))
+	os.Exit(1)
 }

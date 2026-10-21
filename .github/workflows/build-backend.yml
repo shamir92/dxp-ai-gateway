@@ -5,6 +5,10 @@ name: build images
 on:
   push:
     branches: [master]
+    # A tag also builds, so a release produces versioned images. Mirror the tag
+    # into SENTRY_RELEASE below; Vercel has no tag variable of its own.
+    tags:
+      - "v*"
     paths:
       - "lp/backend/**"
       - "lp/worker/**"
@@ -56,6 +60,7 @@ jobs:
           tags: |
             type=sha,format=long,prefix=
             type=ref,event=branch
+            type=ref,event=tag
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push
@@ -67,6 +72,11 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # Baked into the image as SENTRY_RELEASE so the worker reports the tag
+          # for a release and the sha otherwise. Vercel supplies its own sha at
+          # runtime, so only the worker needs this.
+          build-args: |
+            SENTRY_RELEASE=${{ github.ref_type == 'tag' && github.ref_name || github.sha }}
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
           provenance: false
