@@ -33,12 +33,8 @@ func (m *SMTPMailer) SendMagicCode(ctx context.Context, msg MagicCodeMessage) er
 	if err != nil {
 		return fmt.Errorf("render: %w", err)
 	}
-	from := m.cfg.From
-	if m.cfg.FromName != "" {
-		from = fmt.Sprintf("%s <%s>", m.cfg.FromName, m.cfg.From)
-	}
-	mime := buildMIME(from, msg.To, subject, textBody, htmlBody)
-	return m.send(from, msg.To, mime)
+	mime := buildMIME(m.headerFrom(), msg.To, subject, textBody, htmlBody)
+	return m.send(msg.To, mime)
 }
 
 func (m *SMTPMailer) SendLoginAlert(ctx context.Context, msg LoginAlertMessage) error {
@@ -46,26 +42,48 @@ func (m *SMTPMailer) SendLoginAlert(ctx context.Context, msg LoginAlertMessage) 
 	if err != nil {
 		return fmt.Errorf("render login alert: %w", err)
 	}
-	from := m.cfg.From
-	if m.cfg.FromName != "" {
-		from = fmt.Sprintf("%s <%s>", m.cfg.FromName, m.cfg.From)
-	}
-	mime := buildMIME(from, msg.To, subject, textBody, htmlBody)
-	return m.send(from, msg.To, mime)
+	mime := buildMIME(m.headerFrom(), msg.To, subject, textBody, htmlBody)
+	return m.send(msg.To, mime)
 }
 
-func (m *SMTPMailer) send(from, to, mime string) error {
+// headerFrom is the RFC 5322 From header value: display name plus addr-spec.
+func (m *SMTPMailer) headerFrom() string {
+	if m.cfg.FromName != "" {
+		return fmt.Sprintf("%s <%s>", m.cfg.FromName, m.cfg.From)
+	}
+	return m.cfg.From
+}
+
+func (m *SMTPMailer) send(to, mime string) error {
 	addr := fmt.Sprintf("%s:%d", m.cfg.Host, m.cfg.Port)
 	auth := smtp.PlainAuth("", m.cfg.Username, m.cfg.Password, m.cfg.Host)
+	// The envelope sender must be a bare reverse-path: no display name, no
+	// angle brackets. "Name <a@b>" passes it verbatim to MAIL FROM and the
+	// server rejects it with 501.
+	envelopeFrom := address(m.cfg.From)
 
 	switch m.cfg.TLS {
 	case "tls":
-		return sendTLS(addr, auth, from, to, mime)
+		return sendTLS(addr, auth, envelopeFrom, to, mime)
 	case "none":
-		return smtp.SendMail(addr, auth, from, []string{to}, []byte(mime))
+		return smtp.SendMail(addr, auth, envelopeFrom, []string{to}, []byte(mime))
 	default: // starttls
-		return smtp.SendMail(addr, auth, from, []string{to}, []byte(mime))
+		return smtp.SendMail(addr, auth, envelopeFrom, []string{to}, []byte(mime))
 	}
+}
+
+// address extracts the bare addr-spec from a possibly display-name decorated
+// address: "DXP AI Gateway <noreply@example.com>" -> "noreply@example.com".
+func address(from string) string {
+	start := strings.IndexByte(from, '<')
+	if start < 0 {
+		return strings.TrimSpace(from)
+	}
+	end := strings.IndexByte(from[start:], '>')
+	if end < 0 {
+		return strings.TrimSpace(from[start+1:])
+	}
+	return strings.TrimSpace(from[start+1 : start+end])
 }
 
 func sendTLS(addr string, auth smtp.Auth, from, to, mime string) error {
