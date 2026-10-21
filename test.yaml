@@ -1,8 +1,0 @@
-curl -X POST "https://tp-sg.fromdxp.com/v1/chat/completions" \
--H "Authorization: Bearer sk-1JYxnfjWZVAxBvbEszTtAW0JpRbPTI0HVF1jHVBBiAxek7JQ" \
--d '{
-"model": "deepseek-v4.1-flash",
-"messages": [
-  { "role": "user", "content": "shamir ganteng gak ?" }
-]
-}'

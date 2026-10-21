@@ -7,6 +7,7 @@ SHELL := /bin/bash
 ROOT := $(CURDIR)
 BACKEND := $(ROOT)/lp/backend
 FRONTEND := $(ROOT)/lp/frontend
+WORKER := $(ROOT)/lp/worker
 
 DB_URL ?= postgres://dxp:dxp@localhost:5432/dxp_ai_gateway?sslmode=disable
 HTTP_ADDR ?= :8080
@@ -54,6 +55,18 @@ build: ## Compile backend server
 .PHONY: run
 run: ## Run backend API server
 	$(MAKE) -C $(BACKEND) run
+
+.PHONY: worker
+worker: ## Compile provisioning worker binary
+	$(MAKE) -C $(WORKER) build
+
+.PHONY: run-worker
+run-worker: ## Run provisioning worker
+	$(MAKE) -C $(WORKER) run
+
+.PHONY: worker-docker
+worker-docker: ## Build provisioning worker container image
+	$(MAKE) -C $(WORKER) docker
 
 .PHONY: test
 test: ## Backend unit tests

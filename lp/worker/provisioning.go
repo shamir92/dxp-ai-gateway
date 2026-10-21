@@ -1,4 +1,4 @@
-package worker
+package main
 
 import (
 	"context"
@@ -9,9 +9,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/dxpglobal/ai-gateway/backend/internal/entity"
-	"github.com/dxpglobal/ai-gateway/backend/internal/integration/newapi"
-	"github.com/dxpglobal/ai-gateway/backend/internal/repository"
+	"github.com/dxpglobal/ai-gateway/worker/internal/entity"
+	"github.com/dxpglobal/ai-gateway/worker/internal/newapi"
+	"github.com/dxpglobal/ai-gateway/worker/internal/repository"
 )
 
 const (
@@ -29,7 +29,9 @@ type UserCreator interface {
 	CreateUser(ctx context.Context, username, displayName string, password []byte) error
 }
 
-type ExternalSiteAccountWorker struct {
+// Provisioner polls the external_site_accounts queue and creates the matching
+// remote account on each external platform.
+type Provisioner struct {
 	repo         repository.ExternalSiteAccountRepo
 	decryptor    PasswordDecryptor
 	clients      map[entity.ExternalSite]UserCreator
@@ -38,11 +40,11 @@ type ExternalSiteAccountWorker struct {
 	batchSize    int
 }
 
-func NewExternalSiteAccountWorker(repo repository.ExternalSiteAccountRepo, decryptor PasswordDecryptor, clients map[entity.ExternalSite]UserCreator) (*ExternalSiteAccountWorker, error) {
+func NewProvisioner(repo repository.ExternalSiteAccountRepo, decryptor PasswordDecryptor, clients map[entity.ExternalSite]UserCreator) (*Provisioner, error) {
 	if repo == nil || decryptor == nil || clients[entity.ExternalSiteTPAI] == nil || clients[entity.ExternalSiteAPAI] == nil {
-		return nil, errors.New("external account worker dependencies are incomplete")
+		return nil, errors.New("provisioner dependencies are incomplete")
 	}
-	return &ExternalSiteAccountWorker{
+	return &Provisioner{
 		repo:         repo,
 		decryptor:    decryptor,
 		clients:      clients,
@@ -52,14 +54,14 @@ func NewExternalSiteAccountWorker(repo repository.ExternalSiteAccountRepo, decry
 	}, nil
 }
 
-func (w *ExternalSiteAccountWorker) Start(ctx context.Context) <-chan struct{} {
+func (p *Provisioner) Start(ctx context.Context) <-chan struct{} {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		ticker := time.NewTicker(w.pollInterval)
+		ticker := time.NewTicker(p.pollInterval)
 		defer ticker.Stop()
 		for {
-			w.processDue(ctx)
+			p.processDue(ctx)
 			select {
 			case <-ctx.Done():
 				return
@@ -70,12 +72,12 @@ func (w *ExternalSiteAccountWorker) Start(ctx context.Context) <-chan struct{} {
 	return done
 }
 
-func (w *ExternalSiteAccountWorker) processDue(ctx context.Context) {
+func (p *Provisioner) processDue(ctx context.Context) {
 	now := time.Now().UTC()
-	accounts, err := w.repo.ClaimDue(ctx, now, now.Add(w.lease), w.batchSize)
+	accounts, err := p.repo.ClaimDue(ctx, now, now.Add(p.lease), p.batchSize)
 	if err != nil {
 		if ctx.Err() == nil {
-			log.Printf("external account worker: claim failed")
+			log.Printf("provisioning worker: claim failed")
 		}
 		return
 	}
@@ -83,33 +85,33 @@ func (w *ExternalSiteAccountWorker) processDue(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		w.processAccount(ctx, account)
+		p.processAccount(ctx, account)
 	}
 }
 
-func (w *ExternalSiteAccountWorker) processAccount(ctx context.Context, account entity.ExternalSiteAccount) {
-	client := w.clients[account.Site]
+func (p *Provisioner) processAccount(ctx context.Context, account entity.ExternalSiteAccount) {
+	client := p.clients[account.Site]
 	if client == nil {
-		w.fail(ctx, account, "unsupported external site")
+		p.fail(ctx, account, "unsupported external site")
 		return
 	}
-	password, err := w.decryptor.Decrypt(account.UserID, account.Site, account.PasswordCiphertext, account.PasswordNonce, account.EncryptionKeyVersion)
+	password, err := p.decryptor.Decrypt(account.UserID, account.Site, account.PasswordCiphertext, account.PasswordNonce, account.EncryptionKeyVersion)
 	if err != nil {
-		w.fail(ctx, account, "stored credential could not be decrypted")
+		p.fail(ctx, account, "stored credential could not be decrypted")
 		return
 	}
 	err = client.CreateUser(ctx, account.Username, account.DisplayName, password)
 	clear(password)
 	if err == nil {
-		if err := w.repo.MarkProvisioned(ctx, account.ID, account.LeaseToken, "", time.Now().UTC()); err != nil {
-			log.Printf("external account worker: completion update failed account_id=%s", account.ID)
+		if err := p.repo.MarkProvisioned(ctx, account.ID, account.LeaseToken, "", time.Now().UTC()); err != nil {
+			log.Printf("provisioning worker: completion update failed account_id=%s", account.ID)
 		}
 		return
 	}
 
 	var apiErr *newapi.APIError
 	if errors.As(err, &apiErr) && !apiErr.Retryable {
-		w.fail(ctx, account, apiErr.Error())
+		p.fail(ctx, account, apiErr.Error())
 		return
 	}
 	delay := retryDelay(account.AttemptCount + 1)
@@ -117,14 +119,14 @@ func (w *ExternalSiteAccountWorker) processAccount(ctx context.Context, account 
 		delay = apiErr.RetryAfter
 	}
 	now := time.Now().UTC()
-	if err := w.repo.MarkRetry(ctx, account.ID, account.LeaseToken, now.Add(delay), safeErrorSummary(err), now); err != nil {
-		log.Printf("external account worker: retry update failed account_id=%s", account.ID)
+	if err := p.repo.MarkRetry(ctx, account.ID, account.LeaseToken, now.Add(delay), safeErrorSummary(err), now); err != nil {
+		log.Printf("provisioning worker: retry update failed account_id=%s", account.ID)
 	}
 }
 
-func (w *ExternalSiteAccountWorker) fail(ctx context.Context, account entity.ExternalSiteAccount, summary string) {
-	if err := w.repo.MarkFailed(ctx, account.ID, account.LeaseToken, summary, time.Now().UTC()); err != nil {
-		log.Printf("external account worker: failure update failed account_id=%s", account.ID)
+func (p *Provisioner) fail(ctx context.Context, account entity.ExternalSiteAccount, summary string) {
+	if err := p.repo.MarkFailed(ctx, account.ID, account.LeaseToken, summary, time.Now().UTC()); err != nil {
+		log.Printf("provisioning worker: failure update failed account_id=%s", account.ID)
 	}
 }
 

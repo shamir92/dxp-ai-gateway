@@ -23,17 +23,9 @@ WORKDIR /app
 
 COPY --from=build /out/server /app/server
 
-# These two are read from the filesystem at startup, relative to the working
-# directory, so they must exist in the image:
-#   migrations                       -> runMigrations (file://migrations)
-#   internal/pkg/mail/templates      -> MAIL_TEMPLATES_DIR default
-COPY --from=build /src/migrations /app/migrations
-COPY --from=build /src/internal/pkg/mail/templates /app/internal/pkg/mail/templates
-
 USER app
 
-ENV HTTP_ADDR=:8080 \
-    MAIL_TEMPLATES_DIR=internal/pkg/mail/templates
+ENV HTTP_ADDR=:8080
 
 EXPOSE 8080
 

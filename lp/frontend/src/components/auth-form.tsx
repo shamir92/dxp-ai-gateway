@@ -19,7 +19,7 @@ function OAuthButtons({ mode }: { mode: "login" | "register" }) {
         variant="outline"
         className="h-11 w-full rounded-full border-line-warm bg-white text-[13px] text-ink"
         onClick={() => {
-          window.location.href = "/api/auth/signin/google";
+          window.location.href = "/api/v1/auth/oauth/google";
         }}
       >
         <svg className="mr-2 size-4" viewBox="0 0 24 24" aria-hidden>
@@ -35,7 +35,7 @@ function OAuthButtons({ mode }: { mode: "login" | "register" }) {
         variant="outline"
         className="h-11 w-full rounded-full border-line-warm bg-white text-[13px] text-ink"
         onClick={() => {
-          window.location.href = "/api/auth/signin/github";
+          window.location.href = "/api/v1/auth/oauth/github";
         }}
       >
         <svg className="mr-2 size-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden>

@@ -2,11 +2,18 @@ package mail
 
 import (
 	"bytes"
+	"embed"
 	"fmt"
 	"html/template"
 	"strings"
 	texttemplate "text/template"
 )
+
+// embedded holds the templates so the binary is self-contained: it no longer
+// needs the working directory (or a Docker COPY) to render mail.
+//
+//go:embed templates/*.tmpl
+var embedded embed.FS
 
 type templateData struct {
 	Code             string
@@ -18,36 +25,37 @@ type templateData struct {
 }
 
 type Templates struct {
-	html    *template.Template
-	text    *texttemplate.Template
-	subject *texttemplate.Template
+	html              *template.Template
+	text              *texttemplate.Template
+	subject           *texttemplate.Template
 	loginAlertSubject *texttemplate.Template
 	loginAlertText    *texttemplate.Template
 	loginAlertHTML    *template.Template
 }
 
-func LoadTemplates(dir string) (*Templates, error) {
-	htmlT, err := template.ParseFiles(dir + "/magic_code.html.tmpl")
+// LoadTemplates parses the templates embedded in the binary.
+func LoadTemplates() (*Templates, error) {
+	htmlT, err := template.ParseFS(embedded, "templates/magic_code.html.tmpl")
 	if err != nil {
 		return nil, fmt.Errorf("html template: %w", err)
 	}
-	textT, err := texttemplate.ParseFiles(dir + "/magic_code.txt.tmpl")
+	textT, err := texttemplate.ParseFS(embedded, "templates/magic_code.txt.tmpl")
 	if err != nil {
 		return nil, fmt.Errorf("text template: %w", err)
 	}
-	subjT, err := texttemplate.ParseFiles(dir + "/magic_code.subject.tmpl")
+	subjT, err := texttemplate.ParseFS(embedded, "templates/magic_code.subject.tmpl")
 	if err != nil {
 		return nil, fmt.Errorf("subject template: %w", err)
 	}
-	laSubj, err := texttemplate.ParseFiles(dir + "/login_alert.subject.tmpl")
+	laSubj, err := texttemplate.ParseFS(embedded, "templates/login_alert.subject.tmpl")
 	if err != nil {
 		return nil, fmt.Errorf("login alert subject template: %w", err)
 	}
-	laText, err := texttemplate.ParseFiles(dir + "/login_alert.txt.tmpl")
+	laText, err := texttemplate.ParseFS(embedded, "templates/login_alert.txt.tmpl")
 	if err != nil {
 		return nil, fmt.Errorf("login alert text template: %w", err)
 	}
-	laHTML, err := template.ParseFiles(dir + "/login_alert.html.tmpl")
+	laHTML, err := template.ParseFS(embedded, "templates/login_alert.html.tmpl")
 	if err != nil {
 		return nil, fmt.Errorf("login alert html template: %w", err)
 	}
@@ -87,11 +95,11 @@ func (t *Templates) Render(msg MagicCodeMessage) (subject, textBody, htmlBody st
 }
 
 type loginAlertData struct {
-	Device     string
-	IP         string
-	Location   string
-	LoggedInAt string
-	ProductName string
+	Device       string
+	IP           string
+	Location     string
+	LoggedInAt   string
+	ProductName  string
 	SupportEmail string
 }
 
