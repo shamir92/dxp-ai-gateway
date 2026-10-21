@@ -27,4 +27,9 @@ COPY --from=build /out/worker /app/worker
 
 USER app
 
+# Release identity for Sentry: the git tag on a tagged build, otherwise the sha.
+# Overridable at run time; an explicit SENTRY_RELEASE in the environment wins.
+ARG SENTRY_RELEASE=""
+ENV SENTRY_RELEASE=$SENTRY_RELEASE
+
 ENTRYPOINT ["/app/worker"]

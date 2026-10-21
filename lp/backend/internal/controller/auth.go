@@ -2,8 +2,10 @@ package controller
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
@@ -13,6 +15,13 @@ import (
 	"github.com/dxpglobal/ai-gateway/backend/internal/usecase"
 )
 
+// writeErr maps a domain error to a client response.
+//
+// The sentinel 4xx cases are expected traffic and stay quiet: a wrong code or
+// an expired session is not an incident. Unexpected failures (and upstream
+// faults, which mean the external platform is broken rather than the caller)
+// are reported, because previously the 500 path answered "internal error"
+// without recording the cause anywhere.
 func writeErr(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, usecase.ErrValidation):
@@ -38,23 +47,49 @@ func writeErr(c *gin.Context, err error) {
 	case errors.Is(err, usecase.ErrExternalAccountMissing):
 		c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": "external_account_missing", "message": "your account is still being provisioned on this platform"}})
 	case errors.Is(err, usecase.ErrExternalCredentials):
+		reportUpstream(c, err, "external platform rejected our credentials")
 		c.JSON(http.StatusBadGateway, gin.H{"error": gin.H{"code": "external_credentials", "message": "the external platform rejected our credentials"}})
 	case errors.Is(err, usecase.ErrExternalRejected):
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "external_rejected", "message": "the external platform rejected the request"}})
 	case errors.Is(err, usecase.ErrExternalUnavailable):
+		reportUpstream(c, err, "external platform unavailable")
 		c.JSON(http.StatusBadGateway, gin.H{"error": gin.H{"code": "external_unavailable", "message": "the external platform is unavailable"}})
 	default:
+		reportInternal(c, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"code": "internal", "message": "internal error"}})
 	}
 }
 
+// reportInternal logs an unexpected fault and sends it to Sentry. This is the
+// path that previously answered 500 with no trace of the underlying error.
+func reportInternal(c *gin.Context, err error) {
+	log := middleware.LoggerFrom(c).With(
+		slog.String("error_code", "internal"),
+		slog.String("error", err.Error()),
+	)
+	log.Error("unhandled request error")
+	sentry.CaptureException(err)
+}
+
+// reportUpstream records a failed call to an external platform. These are 5xx
+// because the fault is upstream, so they are worth surfacing.
+func reportUpstream(c *gin.Context, err error, reason string) {
+	log := middleware.LoggerFrom(c).With(
+		slog.String("error_code", "upstream"),
+		slog.String("reason", reason),
+		slog.String("error", err.Error()),
+	)
+	log.Error("upstream request failed")
+	sentry.CaptureException(err)
+}
+
 type AuthController struct {
-	auth           *usecase.AuthUsecase
-	sessionsMW     *middleware.SessionAuth
-	google         *oauth.GoogleProvider
-	github         *oauth.GithubProvider
-	publicWebURL   string
-	stateStore     map[string]string
+	auth         *usecase.AuthUsecase
+	sessionsMW   *middleware.SessionAuth
+	google       *oauth.GoogleProvider
+	github       *oauth.GithubProvider
+	publicWebURL string
+	stateStore   map[string]string
 }
 
 func NewAuthController(

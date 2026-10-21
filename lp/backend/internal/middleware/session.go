@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -17,9 +18,9 @@ const (
 )
 
 type SessionAuth struct {
-	auth         *usecase.AuthUsecase
-	cookieName   string
-	sessionTTL   int // days
+	auth       *usecase.AuthUsecase
+	cookieName string
+	sessionTTL int // days
 }
 
 func NewSessionAuth(auth *usecase.AuthUsecase, cookieName string, sessionTTLDays int) *SessionAuth {
@@ -34,11 +35,16 @@ func (m *SessionAuth) RequireSession() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		raw, err := c.Cookie(m.cookieName)
 		if err != nil || raw == "" {
+			// No cookie at all is normal for a signed-out visitor.
+			LoggerFrom(c).Debug("session rejected: no cookie")
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": gin.H{"code": "unauthenticated", "message": "not signed in"}})
 			return
 		}
 		user, sess, err := m.auth.SessionUser(c.Request.Context(), raw)
 		if err != nil {
+			// A cookie was presented but did not resolve: either it expired or
+			// it is bogus. Logged because a spike means something is wrong.
+			LoggerFrom(c).Info("session rejected: lookup failed", slog.String("error", err.Error()))
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": gin.H{"code": "unauthenticated", "message": "not signed in"}})
 			return
 		}
@@ -57,6 +63,7 @@ func RequireCSRF() gin.HandlerFunc {
 			return
 		}
 		if c.GetHeader("X-Requested-With") == "" && c.GetHeader("X-CSRF-Protection") == "" {
+			LoggerFrom(c).Info("request rejected: missing CSRF header")
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": gin.H{"code": "csrf", "message": "missing CSRF header"}})
 			return
 		}
