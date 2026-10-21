@@ -3,10 +3,11 @@ package main
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"math/rand/v2"
 	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/google/uuid"
 
 	"github.com/dxpglobal/ai-gateway/worker/internal/entity"
@@ -77,7 +78,10 @@ func (p *Provisioner) processDue(ctx context.Context) {
 	accounts, err := p.repo.ClaimDue(ctx, now, now.Add(p.lease), p.batchSize)
 	if err != nil {
 		if ctx.Err() == nil {
-			log.Printf("provisioning worker: claim failed")
+			// The error is the only thing that explains a stalled queue; the
+			// previous message discarded it.
+			slog.Error("claim failed", slog.Any("error", err))
+			sentry.CaptureException(err)
 		}
 		return
 	}
@@ -104,7 +108,12 @@ func (p *Provisioner) processAccount(ctx context.Context, account entity.Externa
 	clear(password)
 	if err == nil {
 		if err := p.repo.MarkProvisioned(ctx, account.ID, account.LeaseToken, "", time.Now().UTC()); err != nil {
-			log.Printf("provisioning worker: completion update failed account_id=%s", account.ID)
+			slog.Error("completion update failed",
+				slog.String("account_id", account.ID.String()),
+				slog.String("site", string(account.Site)),
+				slog.Any("error", err),
+			)
+			sentry.CaptureException(err)
 		}
 		return
 	}
@@ -119,14 +128,45 @@ func (p *Provisioner) processAccount(ctx context.Context, account entity.Externa
 		delay = apiErr.RetryAfter
 	}
 	now := time.Now().UTC()
+	slog.Warn("provisioning attempt failed, retrying",
+		slog.String("account_id", account.ID.String()),
+		slog.String("site", string(account.Site)),
+		slog.Int("attempt", account.AttemptCount+1),
+		slog.Duration("retry_in", delay),
+		slog.String("reason", safeErrorSummary(err)),
+	)
 	if err := p.repo.MarkRetry(ctx, account.ID, account.LeaseToken, now.Add(delay), safeErrorSummary(err), now); err != nil {
-		log.Printf("provisioning worker: retry update failed account_id=%s", account.ID)
+		slog.Error("retry update failed",
+			slog.String("account_id", account.ID.String()),
+			slog.Any("error", err),
+		)
+		sentry.CaptureException(err)
 	}
 }
 
 func (p *Provisioner) fail(ctx context.Context, account entity.ExternalSiteAccount, summary string) {
+	// A failed account is the worker's real incident signal: nothing else
+	// surfaces it, and it means a user is stuck mid-provisioning.
+	sentry.WithScope(func(scope *sentry.Scope) {
+		scope.SetTag("site", string(account.Site))
+		scope.SetContext("account", map[string]any{
+			"account_id": account.ID.String(),
+			"attempts":   account.AttemptCount,
+		})
+		sentry.CaptureMessage("external account provisioning failed: " + summary)
+	})
+	slog.Error("provisioning failed permanently",
+		slog.String("account_id", account.ID.String()),
+		slog.String("site", string(account.Site)),
+		slog.Int("attempts", account.AttemptCount+1),
+		slog.String("reason", summary),
+	)
 	if err := p.repo.MarkFailed(ctx, account.ID, account.LeaseToken, summary, time.Now().UTC()); err != nil {
-		log.Printf("provisioning worker: failure update failed account_id=%s", account.ID)
+		slog.Error("failure update failed",
+			slog.String("account_id", account.ID.String()),
+			slog.Any("error", err),
+		)
+		sentry.CaptureException(err)
 	}
 }
 
