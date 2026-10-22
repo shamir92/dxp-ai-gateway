@@ -18,6 +18,7 @@ import (
 	"github.com/dxpglobal/ai-gateway/worker/internal/config"
 	"github.com/dxpglobal/ai-gateway/worker/internal/credentials"
 	"github.com/dxpglobal/ai-gateway/worker/internal/entity"
+	"github.com/dxpglobal/ai-gateway/worker/internal/logging"
 	"github.com/dxpglobal/ai-gateway/worker/internal/newapi"
 	"github.com/dxpglobal/ai-gateway/worker/internal/observability"
 	"github.com/dxpglobal/ai-gateway/worker/internal/repository/postgres"
@@ -28,6 +29,10 @@ func main() {
 	if err := config.LoadDotEnv(".env"); err != nil && !os.IsNotExist(err) {
 		slog.Warn("dotenv load failed", slog.Any("error", err))
 	}
+
+	// Install the JSON logger after .env so LOG_LEVEL from the file applies, but
+	// before config.Load so that a startup failure is emitted as JSON too.
+	logging.Setup()
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -73,7 +78,12 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	slog.Info("provisioning worker started")
+	// The resolved database is logged so "idle" can be told apart from "pointed
+	// at the wrong database" without reading the environment by hand.
+	slog.Info("provisioning worker started",
+		slog.String("db", config.DatabaseTarget(cfg.DatabaseURL)),
+		slog.Duration("poll_interval", defaultPollInterval),
+	)
 	<-provisioner.Start(ctx)
 	slog.Info("provisioning worker stopped")
 }

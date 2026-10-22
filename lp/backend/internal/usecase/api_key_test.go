@@ -385,10 +385,14 @@ func TestSubscriptionScalesCreditsBy1428(t *testing.T) {
 	}
 
 	uc := provisionedUC(t, tokens, &fakeAccounts{}, client)
-	view, err := uc.Subscription(context.Background(), userID, entity.ExternalSiteTPAI)
+	usage, err := uc.Subscription(context.Background(), userID, entity.ExternalSiteTPAI)
 	if err != nil {
 		t.Fatalf("Subscription: %v", err)
 	}
+	if len(usage.Plans) != 1 {
+		t.Fatalf("plans = %d, want 1", len(usage.Plans))
+	}
+	view := usage.Plans[0]
 	// Values captured from the live TPAI response.
 	if view.CreditsUsed != 525_799_596 {
 		t.Errorf("credits_used = %d, want 525799596", view.CreditsUsed)
@@ -401,6 +405,126 @@ func TestSubscriptionScalesCreditsBy1428(t *testing.T) {
 	}
 	if view.Status != "active" || view.PlanID != 1 {
 		t.Errorf("view = %+v", view)
+	}
+	if usage.BillingPreference != "subscription_only" {
+		t.Errorf("billing_preference = %q", usage.BillingPreference)
+	}
+}
+
+func TestSubscriptionReturnsEveryActivePlan(t *testing.T) {
+	tokens := &fakeTokens{}
+	client := &fakeClient{}
+	client.listTokens = func(string, int, int) (newapi.TokenPage, error) { return newapi.TokenPage{}, nil }
+	client.login = func(string, []byte) (newapi.SessionToken, error) {
+		return newapi.SessionToken{AccessToken: "JWT-1"}, nil
+	}
+	client.verify = func(string, string, any, []byte) (newapi.SecurityProof, error) {
+		return newapi.SecurityProof{ProofToken: "PROOF-1"}, nil
+	}
+	client.createAccess = func(string, string, newapi.AccessTokenCreateRequest) (newapi.AccessTokenCreated, error) {
+		return newapi.AccessTokenCreated{Token: "nap_stored"}, nil
+	}
+	client.subscription = func(string) (newapi.SubscriptionSelf, error) {
+		return newapi.SubscriptionSelf{Subscriptions: []newapi.SubscriptionSummary{
+			{Subscription: newapi.Subscription{ID: 7, PlanID: 1, AmountTotal: 1000, AmountUsed: 100, Status: "active"}},
+			{Subscription: newapi.Subscription{ID: 9, PlanID: 2, AmountTotal: 0, AmountUsed: 50, Status: "active"}},
+		}}, nil
+	}
+
+	uc := provisionedUC(t, tokens, &fakeAccounts{}, client)
+	usage, err := uc.Subscription(context.Background(), uuid.New(), entity.ExternalSiteTPAI)
+	if err != nil {
+		t.Fatalf("Subscription: %v", err)
+	}
+	if len(usage.Plans) != 2 {
+		t.Fatalf("plans = %d, want 2", len(usage.Plans))
+	}
+	// Order is preserved: the platform returns plans in priority order.
+	if usage.Plans[0].PlanID != 1 || usage.Plans[1].PlanID != 2 {
+		t.Errorf("plan order = %d, %d; want 1, 2", usage.Plans[0].PlanID, usage.Plans[1].PlanID)
+	}
+	if usage.Plans[0].Unlimited {
+		t.Error("plan 1 has a non-zero total, must not be unlimited")
+	}
+	if !usage.Plans[1].Unlimited || usage.Plans[1].CreditsTotal != nil {
+		t.Errorf("plan 2 = %+v, want unlimited with nil credits_total", usage.Plans[1])
+	}
+	// The instance id must survive, since plan_id alone is not unique.
+	if usage.Plans[0].SubscriptionID != 7 || usage.Plans[1].SubscriptionID != 9 {
+		t.Errorf("subscription ids = %d, %d; want 7, 9",
+			usage.Plans[0].SubscriptionID, usage.Plans[1].SubscriptionID)
+	}
+}
+
+func TestSubscriptionKeepsInstancesOfTheSamePlanDistinct(t *testing.T) {
+	tokens := &fakeTokens{}
+	client := &fakeClient{}
+	client.listTokens = func(string, int, int) (newapi.TokenPage, error) { return newapi.TokenPage{}, nil }
+	client.login = func(string, []byte) (newapi.SessionToken, error) {
+		return newapi.SessionToken{AccessToken: "JWT-1"}, nil
+	}
+	client.verify = func(string, string, any, []byte) (newapi.SecurityProof, error) {
+		return newapi.SecurityProof{ProofToken: "PROOF-1"}, nil
+	}
+	client.createAccess = func(string, string, newapi.AccessTokenCreateRequest) (newapi.AccessTokenCreated, error) {
+		return newapi.AccessTokenCreated{Token: "nap_stored"}, nil
+	}
+	// Two instances of plan 1, as happens when a user buys the same plan twice.
+	client.subscription = func(string) (newapi.SubscriptionSelf, error) {
+		return newapi.SubscriptionSelf{Subscriptions: []newapi.SubscriptionSummary{
+			{Subscription: newapi.Subscription{ID: 11, PlanID: 1, AmountTotal: 1000, Status: "active"}},
+			{Subscription: newapi.Subscription{ID: 12, PlanID: 1, AmountTotal: 1000, Status: "active"}},
+		}}, nil
+	}
+
+	uc := provisionedUC(t, tokens, &fakeAccounts{}, client)
+	usage, err := uc.Subscription(context.Background(), uuid.New(), entity.ExternalSiteTPAI)
+	if err != nil {
+		t.Fatalf("Subscription: %v", err)
+	}
+	if len(usage.Plans) != 2 {
+		t.Fatalf("plans = %d, want 2", len(usage.Plans))
+	}
+	seen := map[int]bool{}
+	for _, plan := range usage.Plans {
+		if plan.PlanID != 1 {
+			t.Errorf("plan_id = %d, want 1 for both instances", plan.PlanID)
+		}
+		if plan.SubscriptionID == 0 {
+			t.Error("subscription_id must be set, it is the only unique key")
+		}
+		if seen[plan.SubscriptionID] {
+			t.Errorf("subscription_id %d repeated; keys must be unique", plan.SubscriptionID)
+		}
+		seen[plan.SubscriptionID] = true
+	}
+}
+
+func TestSubscriptionWithNoActivePlanReturnsEmptyList(t *testing.T) {
+	tokens := &fakeTokens{}
+	client := &fakeClient{}
+	client.listTokens = func(string, int, int) (newapi.TokenPage, error) { return newapi.TokenPage{}, nil }
+	client.login = func(string, []byte) (newapi.SessionToken, error) {
+		return newapi.SessionToken{AccessToken: "JWT-1"}, nil
+	}
+	client.verify = func(string, string, any, []byte) (newapi.SecurityProof, error) {
+		return newapi.SecurityProof{ProofToken: "PROOF-1"}, nil
+	}
+	client.createAccess = func(string, string, newapi.AccessTokenCreateRequest) (newapi.AccessTokenCreated, error) {
+		return newapi.AccessTokenCreated{Token: "nap_stored"}, nil
+	}
+	client.subscription = func(string) (newapi.SubscriptionSelf, error) {
+		return newapi.SubscriptionSelf{BillingPreference: "balance"}, nil
+	}
+
+	uc := provisionedUC(t, tokens, &fakeAccounts{}, client)
+	usage, err := uc.Subscription(context.Background(), uuid.New(), entity.ExternalSiteTPAI)
+	if err != nil {
+		t.Fatalf("Subscription: %v", err)
+	}
+	// A non-nil empty slice so the API serialises [] rather than null.
+	if usage.Plans == nil || len(usage.Plans) != 0 {
+		t.Errorf("plans = %v, want empty non-nil slice", usage.Plans)
 	}
 }
 
@@ -426,10 +550,14 @@ func TestSubscriptionTreatsZeroTotalAsUnlimited(t *testing.T) {
 	}
 
 	uc := provisionedUC(t, tokens, &fakeAccounts{}, client)
-	view, err := uc.Subscription(context.Background(), uuid.New(), entity.ExternalSiteTPAI)
+	usage, err := uc.Subscription(context.Background(), uuid.New(), entity.ExternalSiteTPAI)
 	if err != nil {
 		t.Fatalf("Subscription: %v", err)
 	}
+	if len(usage.Plans) != 1 {
+		t.Fatalf("plans = %d, want 1", len(usage.Plans))
+	}
+	view := usage.Plans[0]
 	if !view.Unlimited {
 		t.Error("amount_total == 0 must report unlimited")
 	}

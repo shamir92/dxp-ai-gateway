@@ -3,12 +3,15 @@ package config
 import (
 	"encoding/base64"
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 )
 
-// Config is the subset of settings the provisioning worker needs. It shares the
-// same environment variable names as the backend so both can read one .env.
+// Config is the subset of settings the provisioning worker needs. The names
+// match the backend's so the same values can be copied between the two files,
+// but the worker reads its own lp/worker/.env and shares no file with the
+// backend.
 type Config struct {
 	DatabaseURL                   string
 	TPAI                          ExternalSite
@@ -51,6 +54,17 @@ func Load() (*Config, error) {
 	}
 	cfg.ExternalPasswordEncryptionKey = key
 	return cfg, nil
+}
+
+// DatabaseTarget renders a DSN as "host:port/database" for logging. Credentials
+// are dropped, so the result is safe to emit: the worker's logs must never carry
+// the database password.
+func DatabaseTarget(dsn string) string {
+	u, err := url.Parse(dsn)
+	if err != nil || u.Host == "" {
+		return "unknown"
+	}
+	return u.Host + u.Path
 }
 
 // LoadDotEnv reads KEY=VALUE lines into the process environment if the key

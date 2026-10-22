@@ -85,6 +85,14 @@ func (p *Provisioner) processDue(ctx context.Context) {
 		}
 		return
 	}
+	if len(accounts) == 0 {
+		// Debug rather than info: this fires on every poll, so at info level it
+		// would bury the lines that matter. It exists so a quiet worker is
+		// provably polling rather than silently stuck — set LOG_LEVEL=debug.
+		slog.Debug("no accounts due")
+		return
+	}
+	slog.Info("claimed accounts", slog.Int("count", len(accounts)))
 	for _, account := range accounts {
 		if ctx.Err() != nil {
 			return
@@ -114,7 +122,13 @@ func (p *Provisioner) processAccount(ctx context.Context, account entity.Externa
 				slog.Any("error", err),
 			)
 			sentry.CaptureException(err)
+			return
 		}
+		slog.Info("external account provisioned",
+			slog.String("account_id", account.ID.String()),
+			slog.String("site", string(account.Site)),
+			slog.Int("attempts", account.AttemptCount+1),
+		)
 		return
 	}
 

@@ -23,6 +23,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Copy, ExternalLink, Key, Trash2 } from "lucide-react";
 import { UserAvatar } from "@/components/user-avatar";
 import { MODEL_PRICING } from "@/lib/model-pricing";
@@ -33,6 +39,7 @@ import {
   formatKeyForDisplay,
   type ApiKey,
   type Endpoint,
+  type SubscriptionUsage,
   type SubscriptionView,
 } from "@/lib/api-keys";
 export function TopSearchBar() {
@@ -47,11 +54,21 @@ export function TopSearchBar() {
   );
 }
 
+/** One plan's numbers, resolved for display. */
+function planTotals(plan: SubscriptionView) {
+  const unlimited = plan.unlimited;
+  const total = plan.credits_total;
+  const used = plan.credits_used;
+  const percent = !unlimited && total && total > 0 ? (used / total) * 100 : 0;
+  const remaining = !unlimited && total ? Math.max(total - used, 0) : null;
+  return { unlimited, total, used, percent, remaining };
+}
+
 export function PlanUsageCard({
-  view,
+  usage,
   loading,
 }: {
-  view: SubscriptionView | null;
+  usage: SubscriptionUsage | null;
   loading: boolean;
 }) {
   if (loading) {
@@ -64,7 +81,8 @@ export function PlanUsageCard({
     );
   }
 
-  if (!view || view.status === "") {
+  const plans = usage?.plans ?? [];
+  if (plans.length === 0) {
     return (
       <Card className="border-line-warm bg-white">
         <CardHeader>
@@ -79,11 +97,26 @@ export function PlanUsageCard({
     );
   }
 
-  const unlimited = view.unlimited;
-  const total = view.credits_total;
-  const used = view.credits_used;
-  const percent = !unlimited && total && total > 0 ? (used / total) * 100 : 0;
-  const remaining = !unlimited && total ? Math.max(total - used, 0) : null;
+  // Every plan with a finite total counts towards the aggregate. Plans are all
+  // unlimited only when every one of them is.
+  const aggregate = plans.reduce(
+    (acc, plan) => {
+      const { unlimited, total, used, remaining } = planTotals(plan);
+      if (!unlimited && total) {
+        acc.total += total;
+        acc.remaining += remaining ?? 0;
+        acc.finite += 1;
+      }
+      acc.used += used;
+      return acc;
+    },
+    { total: 0, used: 0, remaining: 0, finite: 0 },
+  );
+  const allUnlimited = aggregate.finite === 0;
+  const percent = allUnlimited || aggregate.total === 0
+    ? 0
+    : (aggregate.used / aggregate.total) * 100;
+  const statuses = Array.from(new Set(plans.map((plan) => plan.status).filter(Boolean)));
 
   return (
     <Card className="border-line-warm bg-white">
@@ -93,32 +126,39 @@ export function PlanUsageCard({
             CURRENT PLAN USAGE
           </CardTitle>
           <p className="mt-2 font-heading text-[28px] font-semibold text-ink">
-            {formatCredits(used)}
+            {formatCredits(aggregate.used)}
           </p>
           <p className="mt-1 text-[12px] text-muted-warm">
-            {unlimited
+            {allUnlimited
               ? "of Unlimited"
-              : `of ${formatCredits(total ?? 0)} · ${percent.toFixed(1)}%`}
+              : `of ${formatCredits(aggregate.total)} · ${percent.toFixed(1)}%`}
+            {plans.length > 1 ? ` · across ${plans.length} plans` : ""}
           </p>
         </div>
-        <Badge
-          className={
-            view.status === "active"
-              ? "rounded-full bg-success/10 text-success"
-              : "rounded-full bg-cream text-muted-warm"
-          }
-        >
-          {view.status || "unknown"}
-        </Badge>
+        <div className="flex items-center gap-2">
+          {statuses.map((status) => (
+            <Badge
+              key={status}
+              className={
+                status === "active"
+                  ? "rounded-full bg-success/10 text-success"
+                  : "rounded-full bg-cream text-muted-warm"
+              }
+            >
+              {status}
+            </Badge>
+          ))}
+        </div>
       </CardHeader>
       <CardContent>
-        {!unlimited ? <Progress value={percent} className="h-2" /> : null}
-        <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-4">
+        {!allUnlimited ? <Progress value={percent} className="h-2" /> : null}
+        <div className="mt-5 grid grid-cols-2 gap-4">
           {[
-            ["Remaining", unlimited ? "Unlimited" : formatCredits(remaining ?? 0)],
-            ["Plan", view.plan_id ? `#${view.plan_id}` : "—"],
-            ["Renews", formatDateTime(view.end_time)],
-            ["Resets", formatDateTime(view.next_reset_time)],
+            [
+              "Remaining",
+              allUnlimited ? "Unlimited" : formatCredits(aggregate.remaining),
+            ],
+            ["Plans", String(plans.length)],
           ].map(([label, value]) => (
             <div key={label}>
               <p className="text-[10px] uppercase tracking-wide text-muted-warm">
@@ -128,12 +168,73 @@ export function PlanUsageCard({
             </div>
           ))}
         </div>
+
+        <Accordion className="mt-5 border-t border-line-warm">
+          {plans.map((plan) => {
+            const { unlimited, total, used, percent, remaining } = planTotals(plan);
+            return (
+              <AccordionItem key={plan.subscription_id} className="not-last:border-b-0">
+                <AccordionTrigger className="py-3 text-[12px] hover:no-underline">
+                  <div className="flex flex-1 flex-wrap items-center gap-x-4 gap-y-1 pr-4">
+                    <span className="font-semibold text-ink">
+                      {plan.plan_id ? `#${plan.plan_id}` : "—"}
+                    </span>
+                    <span className="text-muted-warm">
+                      {formatCredits(used)} of{" "}
+                      {unlimited ? "Unlimited" : formatCredits(total ?? 0)}
+                    </span>
+                    <span className="ml-auto text-muted-warm">
+                      {unlimited ? "Unlimited" : `${percent.toFixed(1)}% used`}
+                    </span>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="pb-4">
+                  {!unlimited ? <Progress value={percent} className="h-1.5" /> : null}
+                  <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-4">
+                    {[
+                      [
+                        "Remaining",
+                        unlimited ? "Unlimited" : formatCredits(remaining ?? 0),
+                      ],
+                      ["Plan", plan.plan_id ? `#${plan.plan_id}` : "—"],
+                      ["Renews", formatDateTime(plan.end_time)],
+                      ["Resets", formatDateTime(plan.next_reset_time)],
+                    ].map(([label, value]) => (
+                      <div key={label}>
+                        <p className="text-[10px] uppercase tracking-wide text-muted-warm">
+                          {label}
+                        </p>
+                        <p className="mt-1 text-[13px] font-semibold text-ink">
+                          {value}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            );
+          })}
+        </Accordion>
       </CardContent>
     </Card>
   );
 }
 
-export function PlanMetaStrip({ view }: { view: SubscriptionView | null }) {
+/**
+ * The plan that expires last is the one that keeps access alive, so the strip
+ * describes that one when a user holds several.
+ */
+function primaryPlan(usage: SubscriptionUsage | null): SubscriptionView | null {
+  const plans = usage?.plans ?? [];
+  return plans.reduce<SubscriptionView | null>(
+    (primary, plan) => (!primary || plan.end_time > primary.end_time ? plan : primary),
+    null,
+  );
+}
+
+export function PlanMetaStrip({ usage }: { usage: SubscriptionUsage | null }) {
+  const view = primaryPlan(usage);
+  const count = usage?.plans.length ?? 0;
   return (
     <Card className="border-line-warm bg-white">
       <CardContent className="flex flex-wrap items-center gap-x-10 gap-y-4 py-5">
@@ -141,6 +242,11 @@ export function PlanMetaStrip({ view }: { view: SubscriptionView | null }) {
           <p className="text-[11px] font-medium text-muted-warm">Individual plan</p>
           <p className="mt-1 text-[14px] font-semibold text-ink">
             {view && view.plan_id ? `Plan #${view.plan_id}` : "No active plan"}
+            {count > 1 ? (
+              <span className="ml-2 font-normal text-muted-warm">
+                +{count - 1} more
+              </span>
+            ) : null}
           </p>
           <p className="text-[11px] text-muted-warm">
             {view && view.end_time
@@ -167,10 +273,12 @@ export function PlanMetaStrip({ view }: { view: SubscriptionView | null }) {
           </div>
         </div>
         <div className="ml-auto flex gap-2">
-          <Button variant="outline" className="rounded-full border-line-warm text-[12px]">
-            Auto-renewal management
-          </Button>
-          <Button className="rounded-full bg-ink text-[12px] text-white hover:bg-ink/90">
+          {/* Not wired up yet — self-serve subscribe has no endpoint behind it. */}
+          <Button
+            disabled
+            title="Coming soon"
+            className="rounded-full bg-ink text-[12px] text-white hover:bg-ink/90"
+          >
             Subscribe plan
           </Button>
         </div>
