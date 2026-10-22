@@ -18,7 +18,7 @@ func newTestClient(t *testing.T, handler http.HandlerFunc) (*Client, *httptest.S
 	srv := httptest.NewTLSServer(handler)
 	t.Cleanup(srv.Close)
 
-	client, err := NewClient(srv.URL, "admin-token", 5*time.Second)
+	client, err := NewClient(srv.URL, "admin-token", "cf-access-id", "cf-access-secret", 5*time.Second)
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}
@@ -356,5 +356,38 @@ func TestStatusReturnsAPIInfoWithoutBearer(t *testing.T) {
 	}
 	if len(status.APIInfo) != 1 || status.APIInfo[0].URL != "https://tp-sg.fromdxp.com" {
 		t.Errorf("api_info = %+v", status.APIInfo)
+	}
+}
+
+// The sites are behind Cloudflare Access, so even an unauthenticated call must
+// present the service token or Zero Trust rejects it before new-api sees it.
+func TestCloudflareAccessTokenIsSentOnEveryRequest(t *testing.T) {
+	var gotID, gotSecret, gotAuth string
+	client, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		gotID = r.Header.Get("CF-Access-Client-Id")
+		gotSecret = r.Header.Get("CF-Access-Client-Secret")
+		gotAuth = r.Header.Get("Authorization")
+		writeEnvelope(t, w, `{"success":true,"data":{"api_info":[]}}`)
+	})
+
+	if _, err := client.Status(context.Background()); err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if gotID != "cf-access-id" || gotSecret != "cf-access-secret" {
+		t.Errorf("access headers = %q/%q, want the service token", gotID, gotSecret)
+	}
+	if gotAuth != "" {
+		t.Errorf("status must not send an Authorization header, got %q", gotAuth)
+	}
+}
+
+// A half-configured service token is a deployment mistake: silently dropping it
+// would surface as an unexplained 403 from the edge.
+func TestNewClientRejectsPartialCloudflareAccessToken(t *testing.T) {
+	if _, err := NewClient("https://tpai.example.com", "admin", "cf-id", "", time.Second); err == nil {
+		t.Error("expected an error when only the client ID is set")
+	}
+	if _, err := NewClient("https://tpai.example.com", "admin", "", "cf-secret", time.Second); err == nil {
+		t.Error("expected an error when only the client secret is set")
 	}
 }

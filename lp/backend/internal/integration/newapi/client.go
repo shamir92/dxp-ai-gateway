@@ -27,6 +27,10 @@ const (
 	proofHeader                = "X-Security-Proof"
 	verificationMethodPassword = "password"
 	sessionMarkerCookie        = "new_api_has_session=1"
+	// Cloudflare Access service-token headers. Without these the Zero Trust
+	// policy rejects the request before it ever reaches new-api.
+	cfAccessClientIDHeader     = "CF-Access-Client-Id"
+	cfAccessClientSecretHeader = "CF-Access-Client-Secret"
 )
 
 // Access-token scopes the gateway requests. The gateway never asks for more than
@@ -40,9 +44,11 @@ const (
 )
 
 type Client struct {
-	baseURL    string
-	adminToken string
-	http       *http.Client
+	baseURL        string
+	adminToken     string
+	cfAccessID     string
+	cfAccessSecret string
+	http           *http.Client
 }
 
 type APIError struct {
@@ -75,7 +81,9 @@ func (e *APIError) Unauthorized() bool {
 	return e.StatusCode == http.StatusUnauthorized || e.StatusCode == http.StatusForbidden
 }
 
-func NewClient(baseURL, adminToken string, timeout time.Duration) (*Client, error) {
+// NewClient builds a client for one new-api site. cfAccessID/cfAccessSecret are
+// the Cloudflare Access service token; both or neither must be set.
+func NewClient(baseURL, adminToken, cfAccessID, cfAccessSecret string, timeout time.Duration) (*Client, error) {
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	parsed, err := url.Parse(baseURL)
 	if err != nil || parsed == nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
@@ -87,12 +95,19 @@ func NewClient(baseURL, adminToken string, timeout time.Duration) (*Client, erro
 	if strings.TrimSpace(adminToken) == "" {
 		return nil, fmt.Errorf("external API admin token is required")
 	}
+	cfAccessID = strings.TrimSpace(cfAccessID)
+	cfAccessSecret = strings.TrimSpace(cfAccessSecret)
+	if (cfAccessID == "") != (cfAccessSecret == "") {
+		return nil, fmt.Errorf("Cloudflare Access client ID and secret must both be set")
+	}
 	if timeout <= 0 {
 		timeout = 10 * time.Second
 	}
 	return &Client{
-		baseURL:    baseURL,
-		adminToken: adminToken,
+		baseURL:        baseURL,
+		adminToken:     adminToken,
+		cfAccessID:     cfAccessID,
+		cfAccessSecret: cfAccessSecret,
 		http: &http.Client{
 			Timeout: timeout,
 			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
@@ -162,6 +177,12 @@ func (c *Client) do(ctx context.Context, opts requestOptions) (json.RawMessage, 
 	}
 	req.Header.Set("Referer", c.baseURL+referer)
 	req.Header.Set("Cookie", sessionMarkerCookie)
+	// Cloudflare Access sits in front of the site, so the service token is
+	// required on every call — including the otherwise-public ones.
+	if c.cfAccessID != "" {
+		req.Header.Set(cfAccessClientIDHeader, c.cfAccessID)
+		req.Header.Set(cfAccessClientSecretHeader, c.cfAccessSecret)
+	}
 	for name, value := range opts.headers {
 		req.Header.Set(name, value)
 	}
