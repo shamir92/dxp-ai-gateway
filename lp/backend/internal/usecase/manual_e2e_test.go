@@ -77,7 +77,7 @@ func TestManualEndToEnd(t *testing.T) {
 			}
 			t.Logf("target user: %s", userID)
 
-			client, err := newapi.NewClient(target.baseURL, target.adminToken, 20*time.Second)
+			client, err := newapi.NewClient(target.baseURL, target.adminToken, os.Getenv("CF_CLIENT_ID"), os.Getenv("CF_CLIENT_SECRET"), 20*time.Second)
 			if err != nil {
 				t.Fatalf("newapi client: %v", err)
 			}

@@ -99,11 +99,11 @@ func main() {
 	if err != nil {
 		fatal("external accounts", err)
 	}
-	tpaiClient, err := newapi.NewClient(cfg.TPAI.BaseURL, cfg.TPAI.AdminToken, 10*time.Second)
+	tpaiClient, err := newapi.NewClient(cfg.TPAI.BaseURL, cfg.TPAI.AdminToken, cfg.CloudflareAccess.ClientID, cfg.CloudflareAccess.ClientSecret, 10*time.Second)
 	if err != nil {
 		fatal("TPAI client", err)
 	}
-	apaiClient, err := newapi.NewClient(cfg.APAI.BaseURL, cfg.APAI.AdminToken, 10*time.Second)
+	apaiClient, err := newapi.NewClient(cfg.APAI.BaseURL, cfg.APAI.AdminToken, cfg.CloudflareAccess.ClientID, cfg.CloudflareAccess.ClientSecret, 10*time.Second)
 	if err != nil {
 		fatal("APAI client", err)
 	}

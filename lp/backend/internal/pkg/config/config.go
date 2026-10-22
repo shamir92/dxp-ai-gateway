@@ -31,11 +31,19 @@ type Config struct {
 	TPAI                          ExternalSite
 	APAI                          ExternalSite
 	ExternalPasswordEncryptionKey []byte
+	// CloudflareAccess guards the external sites behind Zero Trust, so every
+	// request to TPAI/APAI must carry a service token.
+	CloudflareAccess CloudflareAccess
 }
 
 type ExternalSite struct {
 	BaseURL    string
 	AdminToken string
+}
+
+type CloudflareAccess struct {
+	ClientID     string
+	ClientSecret string
 }
 
 func Load() (*Config, error) {
@@ -75,6 +83,10 @@ func Load() (*Config, error) {
 			BaseURL:    strings.TrimRight(strings.TrimSpace(os.Getenv("APAI_BASE_URL")), "/"),
 			AdminToken: strings.TrimSpace(os.Getenv("APAI_ADMIN_TOKEN")),
 		},
+		CloudflareAccess: CloudflareAccess{
+			ClientID:     strings.TrimSpace(os.Getenv("CF_CLIENT_ID")),
+			ClientSecret: strings.TrimSpace(os.Getenv("CF_CLIENT_SECRET")),
+		},
 	}
 	if cfg.DatabaseURL == "" {
 		return nil, fmt.Errorf("DATABASE_URL is required")
@@ -83,6 +95,9 @@ func Load() (*Config, error) {
 		if site.BaseURL == "" || site.AdminToken == "" {
 			return nil, fmt.Errorf("%s_BASE_URL and %s_ADMIN_TOKEN are required", name, name)
 		}
+	}
+	if (cfg.CloudflareAccess.ClientID == "") != (cfg.CloudflareAccess.ClientSecret == "") {
+		return nil, fmt.Errorf("CF_CLIENT_ID and CF_CLIENT_SECRET must both be set")
 	}
 	keyText := strings.TrimSpace(os.Getenv("EXTERNAL_PASSWORD_ENCRYPTION_KEY"))
 	if keyText == "" {
