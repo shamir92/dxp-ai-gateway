@@ -8,22 +8,10 @@ const models = [
     desc: "Fastest reasoning tier for high-throughput agents.",
   },
   {
-    id: "deepseek-v4-flash-fast",
-    vendor: "DeepSeek",
-    tag: "Fastest",
-    desc: "Fastest low-latency tier for real-time routing.",
-  },
-  {
     id: "deepseek-v4.1-flash",
     vendor: "DeepSeek",
     tag: "Reasoning",
     desc: "Fast, efficient reasoning for production workloads.",
-  },
-  {
-    id: "deepseek-v4-flash",
-    vendor: "DeepSeek",
-    tag: "Speed",
-    desc: "Low-latency chat, extraction, and routing.",
   },
   {
     id: "mimo-v2.6-pro",

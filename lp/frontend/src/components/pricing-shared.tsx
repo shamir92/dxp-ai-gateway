@@ -22,12 +22,7 @@ export type Plan = {
 export const modelGroups = [
   {
     title: "DeepSeek",
-    items: [
-      "deepseek-v4.1-flash-fast",
-      "deepseek-v4-flash-fast",
-      "deepseek-v4.1-flash",
-      "deepseek-v4-flash",
-    ],
+    items: ["deepseek-v4.1-flash-fast", "deepseek-v4.1-flash"],
   },
   {
     title: "MiMo",

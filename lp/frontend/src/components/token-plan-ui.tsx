@@ -515,10 +515,9 @@ export function ApiKeyCard({
   );
 }
 
-/** The plan benefit: every plan includes the same ten models. */
+/** The plan benefit: every plan includes the same eight models. */
 const planModels = [
   "deepseek-v4.1-flash-fast",
-  "deepseek-v4-flash-fast",
   "minimax-m3",
   "mimo-v2.6-pro",
   "mimo-v2.6-flash",
@@ -526,7 +525,6 @@ const planModels = [
   "glm-5.3",
   "glm-5.3-flash",
   "deepseek-v4.1-flash",
-  "deepseek-v4-flash",
 ];
 
 export function PlanBenefitsCard({ credits }: { credits: string }) {

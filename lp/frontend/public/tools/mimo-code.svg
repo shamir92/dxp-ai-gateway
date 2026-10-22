@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="mimo-code-title">
+  <title id="mimo-code-title">MiMo Code</title>
+  <!-- Rounded ink badge with a two-stroke "M" and an orange underline accent,
+       so the mark stays legible at 20px beside the other tool logos. -->
+  <rect x="4" y="4" width="56" height="56" rx="16" fill="#151515"/>
+  <path d="M19 42V23h6l7 9.5 7-9.5h6v19h-6V32.5l-7 9.5-7-9.5V42z" fill="#FFFFFF"/>
+  <rect x="19" y="46.5" width="26" height="3.5" rx="1.75" fill="#FF6900"/>
+</svg>

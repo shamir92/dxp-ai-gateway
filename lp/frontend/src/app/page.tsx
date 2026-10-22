@@ -6,7 +6,6 @@ import {
 } from "lucide-react";
 import { PublicShell } from "@/components/public-shell";
 import { ButtonLink } from "@/components/button-link";
-import { Badge } from "@/components/ui/badge";
 import { ApiPlayground } from "@/components/api-playground";
 
 const metrics = [
@@ -18,9 +17,7 @@ const metrics = [
 
 const models = [
   { id: "deepseek-v4.1-flash-fast", vendor: "DeepSeek", note: "Fastest reasoning tier" },
-  { id: "deepseek-v4-flash-fast", vendor: "DeepSeek", note: "Fastest low-latency tier" },
   { id: "deepseek-v4.1-flash", vendor: "DeepSeek", note: "Fast, efficient reasoning" },
-  { id: "deepseek-v4-flash", vendor: "DeepSeek", note: "Low-latency chat and extraction" },
   { id: "mimo-v2.6-pro", vendor: "MiMo", note: "Deep analysis and agent planning" },
   { id: "mimo-v2.6-flash", vendor: "MiMo", note: "High-speed general purpose" },
   { id: "glm-5.3-flash", vendor: "GLM", note: "Balanced speed and quality" },
@@ -91,11 +88,7 @@ export default function LandingPage() {
       <section className="relative overflow-hidden bg-cream px-14 py-20">
         <div className="mx-auto grid max-w-[1302px] items-center gap-14 lg:grid-cols-[1fr_1.1fr]">
           <div>
-            <Badge className="rounded-full border-line-warm bg-white px-3 py-1.5 text-[10px] font-medium text-ink">
-              <span className="mr-1.5 size-1.5 rounded-full bg-flame" />
-              MIMO V2.6 IS NOW AVAILABLE
-            </Badge>
-            <h1 className="mt-6 font-heading text-[58px] font-semibold leading-[1.05] tracking-tight text-ink">
+            <h1 className="font-heading text-[58px] font-semibold leading-[1.05] tracking-tight text-ink">
               Build intelligence that moves at your speed.
             </h1>
             <p className="mt-5 max-w-[550px] text-[15px] leading-relaxed text-muted-warm">
