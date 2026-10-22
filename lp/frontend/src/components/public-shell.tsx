@@ -28,12 +28,6 @@ const navItems: NavItem[] = [
 export function SiteHeader() {
   return (
     <>
-      <div className="flex h-[34px] items-center justify-center bg-night px-4">
-        <p className="text-[10px] font-medium text-white">
-          MiMo V2.6 series is now live — faster reasoning, full modality, built for
-          production →
-        </p>
-      </div>
       <header className="border-b border-line-warm bg-white">
         <div className="mx-auto flex h-[72px] max-w-[1442px] items-center justify-between px-4 sm:px-6 lg:px-14">
           <Brand />

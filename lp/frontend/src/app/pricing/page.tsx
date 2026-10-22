@@ -1,4 +1,4 @@
-import { ArrowRight, Terminal } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { PublicShell } from "@/components/public-shell";
 import { ButtonLink } from "@/components/button-link";
 import {
@@ -9,20 +9,17 @@ import {
 } from "@/components/ui/accordion";
 import { PlanGrid, ModelsSection, type Plan } from "@/components/pricing-shared";
 
+// Logos are self-hosted under /tools so the page makes no third-party requests.
 const codingTools = [
-  "MiMo Desktop",
-  "MiMo Code",
-  "OpenCode",
-  "OpenClaw",
-  "Claude Code",
-  "Codex",
-  "Hermes Agent",
-  "Kilo Code",
-  "Chatbox AI",
-  "Cline",
-  "Cherry Studio",
-  "Qwen Code",
-  "CodeBuddy",
+  { name: "MiMo Code", icon: "/tools/mimo-code.svg" },
+  { name: "OpenCode", icon: "/tools/opencode.svg" },
+  { name: "OpenClaw", icon: "/tools/openclaw.png" },
+  { name: "Claude Code", icon: "/tools/claude-code.png" },
+  { name: "Codex", icon: "/tools/codex.png" },
+  { name: "Hermes Agent", icon: "/tools/hermes.png" },
+  { name: "Kilo Code", icon: "/tools/kilocode.svg" },
+  { name: "Cline", icon: "/tools/cline.svg" },
+  { name: "Qwen Code", icon: "/tools/qwen.svg" },
 ];
 
 const quickStart = [
@@ -61,10 +58,7 @@ const flagship: Plan["features"] = [
     title: "All 10 Flagship Models",
     sub: "DeepSeek V4.1/V4 · MiMo V2.6 · GLM 5.3 · Kimi K3 · MiniMax M3",
   },
-  { title: "V2.6 Flagship Model Access", sub: "Text / Multimodal / Speech" },
   { title: "Coding Framework Support", sub: "OpenClaw / Codex / MiMo Claw etc." },
-  { title: "Free TTS Models", sub: "Limited time offer" },
-  { title: "Night 0.8x Usage", sub: "00:00–08:00 UTC+8" },
   { title: "Unlimited Usage", sub: "No weekly cap · No 5-hour cap" },
 ];
 
@@ -127,15 +121,11 @@ const tokenPlans: Plan[] = [
 const benefits = [
   {
     title: "Same models, monthly credits",
-    desc: "Flagship V2.6 access on every plan — pick the credit pack that matches your pace.",
+    desc: "A broad catalog of models on every plan — pick the credit pack that matches your pace.",
   },
   {
     title: "Coding tools included",
     desc: "Works with OpenClaw, Codex, MiMo Claw, and other frameworks.",
-  },
-  {
-    title: "Night discount",
-    desc: "0.8× credit usage from 00:00–08:00 UTC+8.",
   },
   {
     title: "Unlimited usage",
@@ -145,24 +135,12 @@ const benefits = [
 
 const faqs = [
   {
-    q: "What is included in each monthly plan?",
-    a: "Every plan includes V2.6 flagship model access (text, multimodal, speech), coding framework support, free TTS models (limited time), night 0.8× usage, and unlimited usage. Plans differ by monthly credit volume: Lite 4.1B, Standard 11B, Pro 38B, Max 82B.",
-  },
-  {
     q: "How does billing work?",
     a: "Plans are billed monthly per individual account. You can pay monthly; optional first-purchase or annual discounts may be shown at checkout when available.",
   },
   {
-    q: "When is night 0.8× usage active?",
-    a: "Off-peak hours are 00:00–08:00 UTC+8 (Beijing). During those hours, usage is charged at a 0.8× credits consumption rate.",
-  },
-  {
     q: "Does the plan renew automatically?",
     a: "Yes. Monthly plans support automatic renewal. Cancellations and refunds are not supported except where required by law.",
-  },
-  {
-    q: "Which models can I use?",
-    a: "The MiMo V2.6 series is available on all plans. Personal plans may also include additional models as listed in the console. The catalog can grow over time.",
   },
   {
     q: "How do I use Token Plan in coding tools?",
@@ -170,7 +148,7 @@ const faqs = [
   },
   {
     q: "Is this different from API plans?",
-    a: "Yes. Token plans are individual monthly credit packs for tools and agents. API plans are for products that call the gateway over HTTP — see API pricing.",
+    a: "Yes. Token plans are individual monthly credit packs for tools and agents. API plans are for products that call the gateway over HTTP — currently in development and releasing soon.",
   },
 ];
 
@@ -191,15 +169,6 @@ export default function PricingPage() {
           </p>
           <div className="mt-6 inline-flex items-center rounded-full border border-line-warm bg-white px-4 py-2 text-[12px] text-muted-warm">
             Individual · Monthly
-          </div>
-          <div className="mt-8">
-            <ButtonLink
-              href="/api-plan"
-              variant="outline"
-              className="h-11 rounded-full border-line-warm bg-white px-6 text-[13px] text-ink"
-            >
-              Looking for API plans? <ArrowRight className="ml-1.5 size-3.5" />
-            </ButtonLink>
           </div>
         </div>
       </section>
@@ -231,13 +200,20 @@ export default function PricingPage() {
           <div className="mx-auto mt-10 grid max-w-[1100px] grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {codingTools.map((tool) => (
               <div
-                key={tool}
+                key={tool.name}
                 className="flex items-center gap-3 rounded-2xl border border-line-warm bg-cream-card px-4 py-4"
               >
                 <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-white">
-                  <Terminal className="size-4 text-ink" />
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={tool.icon}
+                    alt=""
+                    width={20}
+                    height={20}
+                    className="size-5 object-contain"
+                  />
                 </span>
-                <span className="text-[13px] font-medium text-ink">{tool}</span>
+                <span className="text-[13px] font-medium text-ink">{tool.name}</span>
               </div>
             ))}
             <div className="flex items-center justify-center rounded-2xl border border-line-warm bg-cream-card px-4 py-4">
