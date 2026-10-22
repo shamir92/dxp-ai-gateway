@@ -4,10 +4,11 @@
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
-DB_URL ?= postgres://dxp:dxp@localhost:5432/dxp_ai_gateway?sslmode=disable
 GO ?= go
 
-export DATABASE_URL := $(DB_URL)
+# Configuration comes from .env (see .env.example). Nothing is exported here on
+# purpose: an exported variable outranks the file, because config.LoadDotEnv only
+# fills in keys that are not already in the environment.
 
 .PHONY: help
 help: ## Show targets
@@ -22,7 +23,7 @@ build: ## Compile worker binary
 	$(GO) build -o bin/worker .
 
 .PHONY: run
-run: ## Run worker (uses DATABASE_URL)
+run: ## Run worker (reads configuration from .env)
 	$(GO) run .
 
 .PHONY: test

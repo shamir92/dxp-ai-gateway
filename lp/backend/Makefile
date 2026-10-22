@@ -4,16 +4,16 @@
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
-DB_URL ?= postgres://dxp:dxp@localhost:5432/dxp_ai_gateway?sslmode=disable
+# DB_URL ?= postgres://dxp:dxp@localhost:5432/dxp_ai_gateway?sslmode=disable
 HTTP_ADDR ?= :8080
 PUBLIC_WEB_URL ?= http://localhost:3000
-MAIL_BACKEND ?= console
+# MAIL_BACKEND ?= console
 GO ?= go
 
-export DATABASE_URL := $(DB_URL)
+# export DATABASE_URL := $(DB_URL)
 export HTTP_ADDR
 export PUBLIC_WEB_URL
-export MAIL_BACKEND
+# export MAIL_BACKEND
 
 .PHONY: help
 help: ## Show targets
