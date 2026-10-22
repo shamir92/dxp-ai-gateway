@@ -22,7 +22,7 @@ import {
   type ApiKey,
   type Endpoint,
   type Site,
-  type SubscriptionView,
+  type SubscriptionUsage,
 } from "@/lib/api-keys";
 
 // A user who registered before provisioning existed has no external account yet.
@@ -35,7 +35,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export function TokenPlanDashboard({ site }: { site: Site }) {
   const router = useRouter();
-  const [subscription, setSubscription] = useState<SubscriptionView | null>(null);
+  const [subscription, setSubscription] = useState<SubscriptionUsage | null>(null);
   const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [createdKey, setCreatedKey] = useState<string | null>(null);
@@ -144,11 +144,15 @@ export function TokenPlanDashboard({ site }: { site: Site }) {
     }
   };
 
-  const creditsLabel = subscription
-    ? subscription.unlimited
-      ? "Unlimited credits"
-      : `${formatCredits(subscription.credits_total ?? 0)} credits`
-    : "—";
+  const plans = subscription?.plans ?? [];
+  const creditsLabel =
+    plans.length === 0
+      ? "—"
+      : plans.every((plan) => plan.unlimited)
+        ? "Unlimited credits"
+        : `${formatCredits(
+            plans.reduce((sum, plan) => sum + (plan.credits_total ?? 0), 0),
+          )} credits`;
 
   return (
     <AppShell
@@ -157,8 +161,8 @@ export function TokenPlanDashboard({ site }: { site: Site }) {
       actions={<TopSearchBar />}
     >
       <div className="mx-auto max-w-[1204px] space-y-6">
-        <PlanMetaStrip view={subscription} />
-        <PlanUsageCard view={subscription} loading={loading} />
+        <PlanMetaStrip usage={subscription} />
+        <PlanUsageCard usage={subscription} loading={loading} />
 
         <div className="grid gap-6 lg:grid-cols-2">
           <ApiKeyCard

@@ -348,8 +348,18 @@ never named in a URL.** The backing platform is bound per route by
 every response body (`site` was removed from the key-page, created-key and subscription
 payloads). The API plan will mirror these as `ap_*`; those routes are not registered yet.
 
-The subscription response exposes `credits_total` / `credits_used` (already ×1428) and the
-raw `amount_total` / `amount_used`, plus `plan_id`, `status`, `end_time`, `next_reset_time`.
+**A user may hold more than one active plan**, so the subscription response is a list, not a
+single record:
+
+```jsonc
+{ "billing_preference": "subscription_only",
+  "plans": [ /* SubscriptionView, in the platform's priority order */ ] }
+```
+
+Each entry of `plans` exposes `credits_total` / `credits_used` (already ×1428) and the raw
+`amount_total` / `amount_used`, plus `plan_id`, `status`, `start_time`, `end_time`,
+`next_reset_time`, `unlimited`. `plans` is always present and non-nil, so a user with no active
+plan gets `[]` rather than `null`.
 
 ## Plan benefits and model catalog (frontend)
 
@@ -419,8 +429,11 @@ Resolved (2026-10-18) — placement:
 6. **All of this lands on the `/token-plan` page** — `app/token-plan/page.tsx` →
    `components/token-plan-dashboard.tsx` → `components/token-plan-ui.tsx`. Its already-built
    shells become live:
-   - `PlanUsageCard` ← `/api/subscription/self` (`amount_used` / `amount_total` × 1428)
-   - `PlanMetaStrip` ← subscription `plan_id`, `status`, `start_time`, `end_time`
+   - `PlanUsageCard` ← every entry of `/api/subscription/self` `subscriptions[]`
+     (`amount_used` / `amount_total` × 1428). The header aggregates all plans; each plan is an
+     expandable row with its own progress bar and dates.
+   - `PlanMetaStrip` ← the plan with the latest `end_time` (the one keeping access alive),
+     plus an `+N more` marker when several plans are active.
    - `ApiKeyCard` ← `/api/token/` (list / create / reveal-once / delete)
    - `PlanBenefitsCard` ← the 10-model list
    - the model filter and usage bar chart stay static for now (no usage-analytics endpoint

@@ -106,13 +106,16 @@ func TestManualEndToEnd(t *testing.T) {
 			t.Logf("reuse + list OK: total=%d returned=%d", second.Total, len(second.Items))
 
 			// Subscription read with the same stored token.
-			view, err := uc.Subscription(ctx, userID, target.site)
+			usage, err := uc.Subscription(ctx, userID, target.site)
 			if err != nil {
 				t.Fatalf("Subscription: %v", err)
 			}
-			t.Logf("subscription OK: plan=%d status=%q amount_total=%d amount_used=%d credits_total=%v credits_used=%d unlimited=%t",
-				view.PlanID, view.Status, view.AmountTotal, view.AmountUsed,
-				view.CreditsTotal, view.CreditsUsed, view.Unlimited)
+			t.Logf("subscription OK: billing_preference=%q plans=%d", usage.BillingPreference, len(usage.Plans))
+			for _, plan := range usage.Plans {
+				t.Logf("  plan=%d status=%q amount_total=%d amount_used=%d credits_total=%v credits_used=%d unlimited=%t",
+					plan.PlanID, plan.Status, plan.AmountTotal, plan.AmountUsed,
+					plan.CreditsTotal, plan.CreditsUsed, plan.Unlimited)
+			}
 
 			// The stored credential must be encrypted at rest, never plaintext.
 			var (

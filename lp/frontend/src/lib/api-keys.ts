@@ -39,7 +39,10 @@ export type KeyPage = {
   total: number;
 };
 
+/** One plan instance. A user may hold several active plans at once. */
 export type SubscriptionView = {
+  /** Identifies the instance; not unique per plan_id, since the same plan can be held twice. */
+  subscription_id: number;
   plan_id: number;
   status: string;
   amount_total: number;
@@ -50,7 +53,12 @@ export type SubscriptionView = {
   start_time: number;
   end_time: number;
   next_reset_time: number;
+};
+
+/** The whole subscription state for one site. Plans keep the platform's priority order. */
+export type SubscriptionUsage = {
   billing_preference: string;
+  plans: SubscriptionView[];
 };
 
 export type CreatedKey = {
@@ -84,7 +92,7 @@ export type KeyInput = {
 };
 
 export function fetchSubscription(site: Site) {
-  return apiJSON<SubscriptionView>(profilePath(site, "subscription"));
+  return apiJSON<SubscriptionUsage>(profilePath(site, "subscription"));
 }
 
 export function fetchEndpoints(site: Site) {

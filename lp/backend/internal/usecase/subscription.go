@@ -14,20 +14,30 @@ import (
 // our side. Both amount_total and amount_used are scaled by it.
 const QuotaToCreditsFactor int64 = 1428
 
-// SubscriptionView is the DXP-facing shape of one site's subscription usage. It
-// deliberately does not name the backing platform.
+// SubscriptionView is the DXP-facing shape of one plan instance. It deliberately
+// does not name the backing platform.
 type SubscriptionView struct {
-	PlanID            int    `json:"plan_id"`
-	Status            string `json:"status"`
-	AmountTotal       int64  `json:"amount_total"`
-	AmountUsed        int64  `json:"amount_used"`
-	CreditsTotal      *int64 `json:"credits_total"`
-	CreditsUsed       int64  `json:"credits_used"`
-	Unlimited         bool   `json:"unlimited"`
-	StartTime         int64  `json:"start_time"`
-	EndTime           int64  `json:"end_time"`
-	NextResetTime     int64  `json:"next_reset_time"`
-	BillingPreference string `json:"billing_preference"`
+	// SubscriptionID identifies the plan instance. It is not unique per plan_id:
+	// a user can hold several instances of the same plan.
+	SubscriptionID int    `json:"subscription_id"`
+	PlanID         int    `json:"plan_id"`
+	Status         string `json:"status"`
+	AmountTotal    int64  `json:"amount_total"`
+	AmountUsed     int64  `json:"amount_used"`
+	CreditsTotal   *int64 `json:"credits_total"`
+	CreditsUsed    int64  `json:"credits_used"`
+	Unlimited      bool   `json:"unlimited"`
+	StartTime      int64  `json:"start_time"`
+	EndTime        int64  `json:"end_time"`
+	NextResetTime  int64  `json:"next_reset_time"`
+}
+
+// SubscriptionUsage is the whole of a user's subscription state for one site.
+// The platform lets a user hold more than one active plan, so plans are a list
+// rather than a single record.
+type SubscriptionUsage struct {
+	BillingPreference string             `json:"billing_preference"`
+	Plans             []SubscriptionView `json:"plans"`
 }
 
 // Endpoint is one API address advertised by the platform. The same base is used
@@ -64,8 +74,8 @@ func (u *APIKeyUsecase) Endpoints(ctx context.Context, userID uuid.UUID, site en
 }
 
 // Subscription reads the user's subscription usage for one site.
-func (u *APIKeyUsecase) Subscription(ctx context.Context, userID uuid.UUID, site entity.ExternalSite) (*SubscriptionView, error) {
-	return withBearer(u, ctx, userID, site, func(bearer string) (*SubscriptionView, error) {
+func (u *APIKeyUsecase) Subscription(ctx context.Context, userID uuid.UUID, site entity.ExternalSite) (*SubscriptionUsage, error) {
+	return withBearer(u, ctx, userID, site, func(bearer string) (*SubscriptionUsage, error) {
 		client, err := u.clientFor(site)
 		if err != nil {
 			return nil, err
@@ -74,29 +84,38 @@ func (u *APIKeyUsecase) Subscription(ctx context.Context, userID uuid.UUID, site
 		if err != nil {
 			return nil, err
 		}
-		return buildSubscriptionView(self), nil
+		return buildSubscriptionUsage(self), nil
 	})
 }
 
-// buildSubscriptionView maps the upstream payload. The active plan is the first
-// entry in Subscriptions; a total of zero means unlimited, so credits_total stays
-// nil in that case rather than being reported as 0.
-func buildSubscriptionView(self newapi.SubscriptionSelf) *SubscriptionView {
-	view := &SubscriptionView{BillingPreference: self.BillingPreference}
-	if len(self.Subscriptions) == 0 {
-		return view
+// buildSubscriptionUsage maps the upstream payload. Plans keeps every active
+// subscription in the order the platform returned them, which is the plan
+// priority order. A total of zero means unlimited, so credits_total stays nil
+// in that case rather than being reported as 0.
+func buildSubscriptionUsage(self newapi.SubscriptionSelf) *SubscriptionUsage {
+	usage := &SubscriptionUsage{
+		BillingPreference: self.BillingPreference,
+		Plans:             make([]SubscriptionView, 0, len(self.Subscriptions)),
 	}
+	for _, summary := range self.Subscriptions {
+		usage.Plans = append(usage.Plans, buildSubscriptionView(summary.Subscription))
+	}
+	return usage
+}
 
-	sub := self.Subscriptions[0].Subscription
-	view.PlanID = sub.PlanID
-	view.Status = sub.Status
-	view.AmountTotal = sub.AmountTotal
-	view.AmountUsed = sub.AmountUsed
-	view.StartTime = sub.StartTime
-	view.EndTime = sub.EndTime
-	view.NextResetTime = sub.NextResetTime
-	view.Unlimited = sub.AmountTotal == 0
-	view.CreditsUsed = sub.AmountUsed * QuotaToCreditsFactor
+func buildSubscriptionView(sub newapi.Subscription) SubscriptionView {
+	view := SubscriptionView{
+		SubscriptionID: sub.ID,
+		PlanID:         sub.PlanID,
+		Status:         sub.Status,
+		AmountTotal:    sub.AmountTotal,
+		AmountUsed:     sub.AmountUsed,
+		StartTime:      sub.StartTime,
+		EndTime:        sub.EndTime,
+		NextResetTime:  sub.NextResetTime,
+		Unlimited:      sub.AmountTotal == 0,
+		CreditsUsed:    sub.AmountUsed * QuotaToCreditsFactor,
+	}
 	if !view.Unlimited {
 		total := sub.AmountTotal * QuotaToCreditsFactor
 		view.CreditsTotal = &total
